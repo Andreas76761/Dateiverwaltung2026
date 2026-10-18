@@ -2,6 +2,17 @@
 
 Ziel: Auf **einem** Computer mit **einem überschaubaren Ordner** prüfen, ob Einlesen, Analyse, Vorschlag und Kopie mit echten Daten funktionieren – ohne Risiko.
 
+Der Probelauf prüft in 6 Schritten alles, was die App kann:
+
+1. **Einlesen** (nur lesend, Cloud-Platzhalter werden erkannt und nicht heruntergeladen)
+2. **Analyse** – Kategorien, Labels, Wichtigkeit, Miniaturen, OCR, Duplikate und **ähnliche Dateien** (Versionen, PDF ↔ DOCX, Fotos); auch HEIC, RAW, mehrseitige TIFF, ZIP-Inhalte, Keynote/Pages und Audio
+3. **Vorschlag** der neuen Ordnerstruktur (virtuell)
+4. **Kopie** als Trockenlauf – oder mit `--kopieren` echt in einen Probe-Ordner, inkl. **PDF-Prüfbericht** unter `_Prüfberichte`
+5. **Zweites Einlesen** – prüft die Änderungserkennung und wie schnell ein erneuter Lauf ist
+6. **Programme & LLMs** dieses Computers – Inventar, lokale Modelle, Empfehlungen (nur lesend; `--ohne-inventar` schaltet es ab)
+
+Danach liegen neben dem Bericht **Excel-Exporte**: Vorschlag, Statistik, ähnliche Dateien, Programme.
+
 **Sicher, weil:**
 - Quellordner werden nur gelesen. Der Probelauf vergleicht vorher/nachher Größe und Änderungsdatum **aller** gelesenen Dateien und meldet jede Abweichung.
 - Standard ist ein **Trockenlauf**: Es wird nichts kopiert und kein Zielordner angelegt. Nur mit `--kopieren` entstehen Kopien – in einem eigenen Probe-Ordner.
@@ -55,15 +66,19 @@ Empfehlung für den ersten Lauf: ein Ordner mit gemischten Dateien (PDFs, Office
 | `--kopieren` | Kopien wirklich anlegen – im Probe-Ordner `…\OneDrive\Future-Dateiverwaltung-Probelauf` (oder `--ziel PFAD`) |
 | `--anonym` | Bericht ohne Datei-/Ordnernamen (zum Teilen) |
 | `--neu` | Probelauf-Datenbank vorher leeren |
+| `--ohne-inventar` | Programme & LLMs dieses Computers nicht erfassen |
 
 ## 3. Ergebnis ansehen
 
-Der Bericht öffnet sich am Ende automatisch: `~/.future-dateiverwaltung/probelauf/probelauf-bericht.md`. Er enthält u. a.:
+Der Bericht öffnet sich am Ende automatisch: `~/.future-dateiverwaltung/probelauf/probelauf-bericht.md`. Im selben Ordner: `probelauf-vorschlag.xlsx`, `probelauf-statistik.xlsx`, `probelauf-aehnliche.xlsx`, `probelauf-programme.xlsx` und mit `--kopieren` `probelauf-pruefbericht.pdf`. Der Bericht enthält u. a.:
 - ✅/❌ ob Quelldateien unverändert blieben
 - Anzahl Dateien, Fehler, Nur-online-Dateien, Duplikate, Zeiten
 - gefundene Programme (LibreOffice, Tesseract, ffmpeg) und Cloud-Ordner
 - Verteilung Privat/Beruf/GenAI/Sonstiges, Top-Kategorien, Dateitypen
 - die wichtigsten Dateien mit vorgeschlagenem neuen Pfad, unsichere Einordnungen
+- ähnliche Dateien (Beispiele), weitere Formate (HEIC, RAW, TIFF, Archive, Keynote/Pages, Audio) mit Vorschau-Quote
+- Ergebnis des zweiten Einlesens (Änderungserkennung) sowie Programme & LLMs mit Empfehlungen
+- Verfügbarkeit der optionalen Bausteine (LibreOffice, Tesseract, ffmpeg, pillow-heif, rawpy, mutagen, 7-Zip)
 
 Die Oberfläche mit den Probelauf-Daten:
 

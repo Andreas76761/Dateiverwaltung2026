@@ -1,7 +1,12 @@
 """Skill: OCR (Tesseract) für Bilder und gescannte PDFs – wie die OCR-Funktion von Screenarchiv/oneSCM."""
 from __future__ import annotations
 
+import os
 from functools import lru_cache
+
+# Tesseract nutzt sonst je Aufruf alle Kerne (OpenMP). Die Analyse liest mehrere Dateien parallel – ohne Begrenzung
+# blockieren sich gleichzeitige OCR-Läufe gegenseitig (gemessen: 1 s einzeln → ~2 min parallel).
+os.environ.setdefault("OMP_THREAD_LIMIT", "1")
 
 from .. import platform_tools
 from ..config import get_settings
