@@ -293,6 +293,17 @@ MIGRATIONS = [
     "CREATE INDEX IF NOT EXISTS ix_events_file ON file_events(file_id)",
     """CREATE TABLE IF NOT EXISTS automation_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, trigger TEXT, status TEXT,
        started_at TEXT, finished_at TEXT, summary TEXT)""",
+    # Programme & LLMs organisieren: normalisierte Namen, Modell-Merkmale, Fingerabdruck, aktueller Stand
+    "ALTER TABLE programs ADD COLUMN norm_key TEXT",
+    "ALTER TABLE programs ADD COLUMN display TEXT",
+    "ALTER TABLE programs ADD COLUMN model_key TEXT",
+    "ALTER TABLE programs ADD COLUMN quant TEXT",
+    "ALTER TABLE programs ADD COLUMN format TEXT",
+    "ALTER TABLE programs ADD COLUMN fingerprint TEXT",
+    "ALTER TABLE programs ADD COLUMN active INTEGER DEFAULT 1",
+    "CREATE INDEX IF NOT EXISTS ix_programs_norm ON programs(norm_key)",
+    "CREATE INDEX IF NOT EXISTS ix_programs_model ON programs(model_key)",
+    "CREATE TABLE IF NOT EXISTS program_recs (key TEXT PRIMARY KEY, status TEXT, note TEXT, updated_at TEXT)",
     # Volltextsuche über Name, Pfad, Zusammenfassung, Inhalt, OCR und Labels (rowid = files.id)
     "CREATE VIRTUAL TABLE IF NOT EXISTS files_fts USING fts5(name, path, body, tokenize='unicode61 remove_diacritics 2')",
 ]

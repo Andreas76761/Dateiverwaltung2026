@@ -63,6 +63,17 @@ Je Gruppe wird eine Empfehlung markiert (★ höchste Versionsangabe bzw. neuest
 
 macOS (launchd) und Linux (systemd-Benutzerdienst): `./dienst-einrichten.sh …` mit denselben Befehlen; `--nur-anzeigen` zeigt vorher, was eingerichtet würde. Unter Windows wird bewusst die Aufgabenplanung „bei Anmeldung“ statt eines SYSTEM-Dienstes genutzt: So läuft der Agent als angemeldeter Benutzer und sieht dessen OneDrive/Google-Drive-Ordner. Der API-Key steht nicht in der Aufgabe, sondern in einer nur für den Benutzer lesbaren `agent.json`. Der Agent liest alle 24 Stunden (`--interval`) und auf Anforderung des Servers neu ein, meldet sich alle 10 Minuten und führt dabei nur freigegebene Kopien aus. Protokoll: `fdv-agent.log` (Pfad zeigt der Installer an).
 
+## Programme & LLMs organisieren
+
+Jeder Computer meldet sein Inventar (dieser Server per „Inventar erfassen“, weitere Computer über den Agenten bzw. den Dienst): installierte Programme, LLM-Tools, Python-KI-Bibliotheken, **lokale Modelle** (Ollama direkt aus den Manifesten – auch wenn Ollama nicht läuft –, LM Studio, GPT4All, Jan, Hugging-Face-Cache, GGUF-Dateien) mit Größe und Fingerabdruck sowie **GPU-/Arbeitsspeicher**. Die Seite „Programme & LLMs“ hat vier Reiter:
+
+- **Empfehlungen** (mit Einsparpotenzial, abhakbar „erledigt“/„ignorieren“): identische Modelldatei mehrfach auf einem Computer · dasselbe Modell in mehreren Tools/Quantisierungen (z. B. Ollama + LM Studio Q4 + Q8) · dasselbe Modell auf mehreren Computern → zentral bereitstellen · ältere Modellgeneration neben neuerer · mehrere Modell-Runner/Chat-Oberflächen/Coding-Assistenten auf einem Rechner · unterschiedliche Versionen desselben Tools · Modell zu groß für Grafik- bzw. Arbeitsspeicher (mit Hinweis auf den besser geeigneten Rechner) · wenig freier Speicher bei vielen Modellen.
+- **Vergleich über alle Computer**: Matrix Programm/Modell × Computer mit Versionen (veraltete markiert) bzw. Größe und Varianten. Modelle werden toolübergreifend erkannt – `llama3.1:8b` (Ollama), `Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf` und `meta-llama/Llama-3.1-8B-Instruct` sind „llama 3.1 · 8B · instruct“.
+- **Speicherbedarf**: Modelle je Computer nach Tool, Hardware, freier Plattenplatz, größte Modelle.
+- **Inventar (Liste)** – alles einzeln; nicht mehr gemeldete Einträge werden nur inaktiv gesetzt.
+
+Die App installiert, entfernt oder verschiebt keine Programme oder Modelle – die Empfehlungen beschreiben, was man selbst im jeweiligen Tool tun kann. Export als Excel (Empfehlungen, Vergleich, Speicher, Inventar). Demo-Inventar für die 4 Demo-Computer: `cd backend && python ../scripts/demo_inventory.py`.
+
 ## Export & Prüfbericht
 
 Fast jede Ansicht hat einen Knopf **Export** (Excel `.xlsx` oder CSV mit Semikolon und UTF-8 – öffnet sich in deutschem Excel direkt richtig):

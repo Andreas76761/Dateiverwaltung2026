@@ -162,7 +162,8 @@ class Agent:
 
     # ---------------- inventory ----------------
     def inventory(self):
-        from .agents.inventory_agent import cli_tools, linux_programs, mac_programs, python_ai_packages, windows_programs, _kind_for
+        from .agents.inventory_agent import (cli_tools, hardware, linux_programs, local_models, mac_programs, python_ai_packages,
+                                             windows_programs, _kind_for)
 
         system = platform.system()
         try:
@@ -171,7 +172,7 @@ class Agent:
             progs = []
         for p in progs:
             p.setdefault("kind", _kind_for(p.get("name") or ""))
-        items = [p for p in progs + cli_tools() + python_ai_packages() if p.get("name")]
+        items = [p for p in progs + cli_tools() + python_ai_packages() + local_models() + hardware() if p.get("name")]
         r = self.http.post("/api/agents/inventory", json={"computer_id": self.computer, "items": items}).raise_for_status()
         print("Inventar:", r.json())
 

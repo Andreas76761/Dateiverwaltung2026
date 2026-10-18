@@ -83,4 +83,7 @@ def export_kind(kind: str, fmt: str, include_duplicates: bool = Query(False)):
         raise HTTPException(404, f"Unbekannter Export. Verfügbar: {', '.join(exports.EXPORTS)}, dateien, kopie/<lauf>")
     title, build = exports.EXPORTS[kind]
     db.audit("export", {"art": kind, "format": fmt})
-    return _send(build(include_duplicates=include_duplicates), title.replace(" ", "_").replace("&", "und"), fmt)
+    sheets = build(include_duplicates=include_duplicates)
+    if kind == "programme" and fmt == "csv":  # CSV kennt nur ein Blatt → das vollständige Inventar
+        sheets = [s for s in sheets if s.title == "Inventar"]
+    return _send(sheets, title.replace(" ", "_").replace("&", "und"), fmt)

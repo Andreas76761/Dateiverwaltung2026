@@ -403,3 +403,8 @@ h3 { font-size: 13px; font-weight: 650; text-transform: uppercase; letter-spacin
 .menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; min-width: 230px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow); padding: 4px; display: flex; flex-direction: column; }
 .menu a { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px; font-size: 13px; color: var(--text); text-decoration: none; cursor: pointer; white-space: nowrap; }
 .menu a:hover { background: var(--accent-soft); color: var(--accent); }
+
+/* ---------- Programme: Vergleichsmatrix ---------- */
+.matrix td.cell-ok { background: var(--ok-soft); }
+.matrix td.cell-old { background: var(--warn-soft); color: var(--warn); }
+.matrix th { position: sticky; top: 0; z-index: 1; }

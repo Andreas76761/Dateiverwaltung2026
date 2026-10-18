@@ -224,12 +224,38 @@ def changes_sheet() -> Sheet:
     return Sheet("Änderungen", headers, rows(), [17, 18, 36, 16, 18, 60, 50, 12])
 
 
-def programs_sheet() -> Sheet:
-    headers = ["Computer", "Name", "Version", "Hersteller", "Art", "Kategorie", "Ort"]
-    rows = ([r["computer"], r["name"], r["version"], r["publisher"], r["kind"], r["category"], r["location"]]
-            for r in _iter("""SELECT COALESCE(c.name, p.computer_id) computer, p.name, p.version, p.publisher, p.kind, p.category, p.location
-                              FROM programs p LEFT JOIN computers c ON c.id=p.computer_id ORDER BY 1, p.kind, p.name COLLATE NOCASE""", ()))
-    return Sheet("Programme & LLMs", headers, rows, [20, 40, 14, 24, 12, 18, 50])
+def programs_sheets() -> list[Sheet]:
+    from .agents import software_org
+
+    gb = 1024 ** 3
+    inv = Sheet("Inventar", ["Computer", "Name", "Vergleichsname", "Version", "Hersteller", "Art", "Tool/Kategorie", "Format",
+                             "Quantisierung", "Größe (Bytes)", "Größe", "Ort", "Erfasst"],
+                ([r["computer_name"], r["name"], r.get("display"), r.get("version"), r.get("publisher"), r["kind"], r.get("tool"),
+                  r.get("format"), r.get("quant"), r.get("size"), fmt_bytes(r.get("size")) if r.get("size") else None, r.get("location"),
+                  _dt(r.get("seen_at"))] for r in sorted(software_org.items(), key=lambda r: (r["computer_name"] or "", r["kind"], r["name"].lower()))),
+                [18, 40, 30, 14, 22, 11, 16, 12, 12, 14, 10, 50, 17])
+    cmp = software_org.compare()
+    comps = cmp["computers"]
+    matrix = Sheet("Vergleich", ["Programm / Modell", "Art", "Rollen", "Computer", "Gesamtgröße", "Neueste Version"] + [c["name"] for c in comps],
+                   ([r["display"], r["kind"], ", ".join(r["roles"]), r["computers"], fmt_bytes(r["size"]) if r["size"] else None, r["newest"]]
+                    + [(("⚠ " if r["cells"][c["id"]]["outdated"] else "") + (", ".join(r["cells"][c["id"]]["versions"]) or
+                        ", ".join(r["cells"][c["id"]]["variants"]) or "✓")) if c["id"] in r["cells"] else None for c in comps]
+                    for r in cmp["rows"]), [34, 11, 22, 9, 12, 14] + [18] * len(comps))
+    recs = software_org.recommendations()
+    rec = Sheet("Empfehlungen", ["Priorität", "Status", "Art", "Empfehlung", "Details", "Computer", "Einsparung (GB)", "Vorgehen (manuell)", "Betroffen"],
+                ([r["priority_text"], r["status"], r["type"], r["title"], r["detail"], ", ".join(r["computers"]),
+                  round(r["saving"] / gb, 2) if r["saving"] else None, r["hint"],
+                  "; ".join(f"{i['computer_name']}: {i['name']}" for i in r["items"])] for r in recs),
+                [10, 10, 14, 50, 60, 30, 14, 70, 80])
+    st = software_org.storage()
+    store = Sheet("Speicher", ["Computer", "Modelle (GB)", "Anzahl Modelle", "Programme (GB, soweit bekannt)", "GPU", "Grafikspeicher (GB)",
+                               "RAM (GB)", "Festplatten frei (GB)", "Je Tool"],
+                  [[c["name"], round(c["models"] / gb, 1), c["models_n"], round(c["programs"] / gb, 1), c.get("gpu"),
+                    round(c["vram"] / gb) if c.get("vram") else None, round(c["ram"] / gb) if c.get("ram") else None,
+                    round(c["disk_free"] / gb) if c.get("disk_free") else None,
+                    ", ".join(f"{k}: {v / gb:.1f} GB" for k, v in c["by_tool"].items())] for c in st["computers"]],
+                  [20, 12, 12, 16, 30, 14, 9, 14, 60])
+    return [rec, matrix, store, inv]
 
 
 # ---------------------------------------------------------------- Ausgabe
@@ -429,5 +455,5 @@ EXPORTS: dict[str, tuple[str, Callable[..., list[Sheet]]]] = {
     "duplikate": ("Duplikate", lambda **k: [duplicates_sheet()]),
     "aehnliche": ("Ähnliche Dateien", lambda **k: [similar_sheet()]),
     "aenderungen": ("Änderungen", lambda **k: [changes_sheet()]),
-    "programme": ("Programme & LLMs", lambda **k: [programs_sheet()]),
+    "programme": ("Programme & LLMs", lambda **k: programs_sheets()),
 }

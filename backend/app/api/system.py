@@ -47,8 +47,9 @@ def sources():
 
 
 @router.get("/programs")
-def programs(computer: Optional[str] = None, kind: Optional[str] = None, q: Optional[str] = None, limit: int = 2000):
-    where, args = ["1=1"], []
+def programs(computer: Optional[str] = None, kind: Optional[str] = None, q: Optional[str] = None, limit: int = 2000,
+             include_inactive: bool = False):
+    where, args = ["1=1" if include_inactive else "COALESCE(p.active, 1)=1"], []
     if computer:
         where.append("p.computer_id=?")
         args.append(computer)
@@ -56,13 +57,13 @@ def programs(computer: Optional[str] = None, kind: Optional[str] = None, q: Opti
         where.append("p.kind=?")
         args.append(kind)
     if q:
-        where.append("(p.name LIKE ? OR p.publisher LIKE ? OR p.category LIKE ?)")
-        args += [f"%{q}%"] * 3
+        where.append("(p.name LIKE ? OR p.publisher LIKE ? OR p.category LIKE ? OR p.display LIKE ?)")
+        args += [f"%{q}%"] * 4
     rows = db.query(f"""SELECT p.*, c.name computer_name FROM programs p LEFT JOIN computers c ON c.id=p.computer_id
                         WHERE {' AND '.join(where)}
                         ORDER BY CASE p.kind WHEN 'llm-modell' THEN 0 WHEN 'llm-tool' THEN 1 WHEN 'dev-tool' THEN 2 ELSE 3 END,
                         p.name COLLATE NOCASE LIMIT ?""", [*args, limit])
-    summary = db.query("SELECT computer_id, kind, COUNT(*) n FROM programs GROUP BY 1,2")
+    summary = db.query("SELECT computer_id, kind, COUNT(*) n, COALESCE(SUM(size),0) bytes FROM programs WHERE COALESCE(active, 1)=1 GROUP BY 1,2")
     return {"items": rows, "summary": summary}
 
 
