@@ -6,6 +6,7 @@ import zipfile
 from pathlib import Path
 
 from .filetype import TEXT_EXTS
+from .video import VIDEO_EXTS as VIDEO_EXTS_
 
 MAX_CHARS = 20000
 
@@ -94,6 +95,13 @@ def extract_text(path: str, ext: str) -> tuple[str, int | None]:
         t, n = _ipynb(path)
     elif ext in (".odt", ".ods", ".odp"):
         t, n = _odf(path)
+    elif ext in (".eml", ".msg"):
+        from . import mail
+        m = mail.parse(path)
+        t, n = mail.to_text(m), None
+    elif ext in VIDEO_EXTS_:
+        from . import video
+        t, n = video.describe(video.probe(path)), None
     elif ext in TEXT_EXTS:
         with open(path, "rb") as fh:
             raw = fh.read(MAX_CHARS * 2)

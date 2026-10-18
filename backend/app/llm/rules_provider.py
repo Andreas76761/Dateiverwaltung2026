@@ -37,8 +37,8 @@ class RulesProvider:
         for c in CATEGORIES:
             s = 0.0
             if ext and ext in c.exts:
-                # Bild mit erkanntem Text (OCR, z. B. gescannter Beleg) → Inhalt zählt mehr als die Endung
-                s += 1.0 if (meta.get("file_type") == "Bild" and len(hay_text) > 80) else 3.0
+                # Bild mit OCR-Text (z. B. gescannter Beleg) oder Video mit Titel → Inhalt zählt mehr als die Endung
+                s += 1.0 if (meta.get("file_type") in ("Bild", "Video") and len(hay_text) > 80) else 3.0
             for kw in c.keywords:
                 rx = _kw(kw)
                 if rx.search(hay_name):

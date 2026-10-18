@@ -10,9 +10,10 @@ Ablauf je Computer (siehe app/agent_client.py):
 """
 from __future__ import annotations
 
+import json
 from typing import Optional
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from .. import db
@@ -84,20 +85,21 @@ def ingest(body: IngestIn):
 
 
 @router.post("/{computer_id}/thumbs/{file_id}")
-async def upload_thumbs(computer_id: str, file_id: int, files: list[UploadFile] = File(...)):
+async def upload_thumbs(computer_id: str, file_id: int, files: list[UploadFile] = File(...), labels: str = Form("[]")):
     f = db.one("SELECT computer_id FROM files WHERE id=?", (file_id,))
     if not f or f["computer_id"] != computer_id:
         raise HTTPException(404)
     out = get_settings().thumbs_dir / str(file_id)
     out.mkdir(parents=True, exist_ok=True)
     rows = []
+    lbls = json.loads(labels or "[]")
     for i, up in enumerate(sorted(files, key=lambda u: u.filename or ""), 1):
         p = out / f"p{i:04d}.jpg"
         p.write_bytes(await up.read())
-        rows.append((file_id, i, str(p), None, None))
+        rows.append((file_id, i, str(p), None, None, lbls[i - 1] if i - 1 < len(lbls) else None))
     with db.tx() as c:
         c.execute("DELETE FROM thumbnails WHERE file_id=?", (file_id,))  # nur Cache-Metadaten
-        c.executemany("INSERT INTO thumbnails(file_id, page, path, width, height) VALUES (?,?,?,?,?)", rows)
+        c.executemany("INSERT INTO thumbnails(file_id, page, path, width, height, label) VALUES (?,?,?,?,?,?)", rows)
     return {"ok": True, "pages": len(rows)}
 
 

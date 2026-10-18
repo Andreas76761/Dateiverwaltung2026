@@ -178,6 +178,44 @@ def png_diagram(p: Path, title: str, boxes: list[str], y: int):
     stamp(p, y)
 
 
+def video(p: Path, seconds: int, y: int, source: str, title: str = ""):
+    """Kurzes Testvideo mit ffmpeg erzeugen (übersprungen, falls ffmpeg fehlt)."""
+    import subprocess
+    exe = shutil.which("ffmpeg")
+    if not exe:
+        try:
+            import imageio_ffmpeg
+            exe = imageio_ffmpeg.get_ffmpeg_exe()
+        except Exception:
+            print("  (ffmpeg fehlt – Demo-Video übersprungen)")
+            return
+    p.parent.mkdir(parents=True, exist_ok=True)
+    meta = ["-metadata", f"title={title}"] if title else []
+    subprocess.run([exe, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-t", str(seconds), "-i", f"{source}=size=960x540:rate=25",
+                    "-f", "lavfi", "-i", f"sine=frequency=440:duration={seconds}", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                    "-c:a", "aac", "-shortest", *meta, "-y", str(p)], check=True)
+    stamp(p, y)
+
+
+def eml(p: Path, subject: str, sender: str, to: str, body: str, y: int, m: int, attachments: list[Path] = (), html_body: str = ""):
+    """E-Mail im .eml-Format (wie aus Outlook/Thunderbird gespeichert) mit echten Anhängen."""
+    import mimetypes
+    from email.message import EmailMessage
+    from email.utils import format_datetime
+    msg = EmailMessage()
+    msg["Subject"], msg["From"], msg["To"] = subject, sender, to
+    msg["Date"] = format_datetime(datetime(y, m, 12, 9, 41).astimezone())
+    msg.set_content(body)
+    if html_body:
+        msg.add_alternative(html_body, subtype="html")
+    for a in attachments:
+        ctype = (mimetypes.guess_type(a.name)[0] or "application/octet-stream").split("/")
+        msg.add_attachment(a.read_bytes(), maintype=ctype[0], subtype=ctype[1], filename=a.name)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(bytes(msg))
+    stamp(p, y, m)
+
+
 def binary(p: Path, size: int, y: int, header: bytes = b""):
     p.parent.mkdir(parents=True, exist_ok=True)
     with open(p, "wb") as fh:
@@ -297,6 +335,30 @@ def main():
                 ["Dokumente", "Chunking", "Embeddings", "Vektor-DB Qdrant", "Retrieval", "Claude LLM"], 2026)
     png_diagram(pc_c / "Pictures/Screenshots/Screenshot_Lieferantenportal.png", "oneSCM Lieferantenportal",
                 ["Bestellungen 128", "Liefertreue 96,4 %", "Offene Rechnungen 7", "Lieferant Nordwind", "Status: aktiv"], 2025)
+
+    # ---------- Videos ----------
+    video(mac / "Movies/Urlaub_Portugal_2025_Strand.mp4", 16, 2025, "testsrc2", "Urlaub Portugal – Strand von Lagos")
+    video(lap / "Videos/Teams_Aufzeichnung_JourFixe_Phoenix.mp4", 24, 2025, "smptebars",
+          "Teams-Meeting Aufzeichnung Projekt Phoenix – Jour Fixe Meilensteine")
+    video(ws / "genai/demos/Agent_Demo_Disposition.mp4", 12, 2026, "mandelbrot", "Demo KI-Agent Disposition mit Claude")
+
+    # ---------- E-Mails (mit Anhängen) ----------
+    eml(od / "Arbeit/Mails/Rechnung 2025-0815 Nordwind Logistik.eml", "Rechnung Nr. 2025-0815 – Lagerleistungen August",
+        "Buchhaltung Nordwind <rechnung@nordwind-logistik.de>", "Andreas <andreas@muster-ag.de>",
+        "Sehr geehrter Herr Andreas,\n\nanbei erhalten Sie unsere Rechnung Nr. 2025-0815 über 21.896,00 EUR brutto "
+        "für die Lagerleistungen im August 2025.\nZahlbar bis 30.09.2025 ohne Abzug.\n\nMit freundlichen Grüßen\nBuchhaltung Nordwind Logistik GmbH",
+        2025, 8, [pc_d / "Arbeit/Rechnungen/Rechnung_2025-0815_Nordwind.pdf"])
+    eml(od / "Arbeit/Mails/AW Budget 2026 und Lizenzen.eml", "AW: Budget 2026 – Planung GenAI und Lizenzen",
+        "M. Klein <m.klein@muster-ag.de>", "Andreas <andreas@muster-ag.de>",
+        "Hallo Andreas,\n\nanbei die überarbeitete Budgetplanung 2026 (Blatt Lizenzen ergänzt) und die Präsentation fürs Q3-Review.\n"
+        "Bitte bis Freitag freigeben – Frist für den Lenkungskreis.\n\nViele Grüße\nMartin",
+        2025, 10, [pc_d / "Arbeit/Budget_2026_Planung.xlsx", pc_c / "Documents/Arbeit/Q3_Review_SCM_2025.pptx"])
+    eml(gd / "Mails/Newsletter KI-Update Oktober.eml", "KI-Update Oktober: Agenten, RAG und neue Modelle",
+        "KI-Newsletter <news@ki-update.example>", "andreas@example.com",
+        "KI-Update Oktober – Agenten, RAG und neue LLM-Modelle.", 2026, 10,
+        [ws / "genai/architektur/RAG_Architektur.png"],
+        html_body="<html><body><h1>KI-Update Oktober</h1><p>Diese Woche: <b>KI-Agenten</b> mit Tool Use, "
+                  "<b>RAG</b> mit Vektor-Datenbanken und neue <b>LLM</b>-Modelle.</p><p>Viel Spaß beim Lesen!</p></body></html>")
 
     # ---------- Sonstiges ----------
     binary(lap / "Downloads/OllamaSetup.exe", 80_000, 2025, b"MZ")

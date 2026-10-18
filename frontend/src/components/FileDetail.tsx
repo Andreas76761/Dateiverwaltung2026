@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowDown, Copy, ExternalLink, Pin, PinOff, Plus, ScanText, Sparkles, X } from "lucide-react";
 import { get, post, rawUrl, thumbUrl } from "../api";
 import type { FileDetail as FD } from "../types";
-import { fmtBytes, fmtDate } from "../util";
+import { fmtBytes, fmtDate, shortLabel } from "../util";
 import { FileIcon, GroupBadge, Importance, PageViewer, ReviewBadge, useToast } from "./ui";
 
 interface Cat { id: string; name: string; group: string }
@@ -14,12 +14,14 @@ export default function FileDetail({ id, onClose, onChanged }: { id: number; onC
   const [newLabel, setNewLabel] = useState("");
   const [cats, setCats] = useState<Cat[]>([]);
   const [editPath, setEditPath] = useState<string | null>(null);
+  const [videoErr, setVideoErr] = useState(false);
   const toast = useToast();
 
   const load = () => get<FD>(`/api/files/${id}`).then(setF).catch((e) => toast(e.message, true));
   useEffect(() => {
     setF(undefined);
     setEditPath(null);
+    setVideoErr(false);
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
@@ -56,6 +58,7 @@ export default function FileDetail({ id, onClose, onChanged }: { id: number; onC
     onChanged?.();
   };
   const target = f.final_path || f.suggested_path;
+  const isVideo = f.file_type === "Video";
 
   return (
     <div className="detail">
@@ -152,18 +155,28 @@ export default function FileDetail({ id, onClose, onChanged }: { id: number; onC
 
         <div>
           <div className="tabs">
-            <button className={tab === "seiten" ? "on" : ""} onClick={() => setTab("seiten")}>Seiten ({f.thumbnails.length})</button>
+            <button className={tab === "seiten" ? "on" : ""} onClick={() => setTab("seiten")}>{isVideo ? "Standbilder" : "Seiten"} ({f.thumbnails.length})</button>
             <button className={tab === "inhalt" ? "on" : ""} onClick={() => setTab("inhalt")}>Inhalt</button>
             <button className={tab === "ocr" ? "on" : ""} onClick={() => setTab("ocr")}><ScanText size={13} style={{ verticalAlign: -2 }} /> OCR</button>
             <button className={tab === "duplikate" ? "on" : ""} onClick={() => setTab("duplikate")}>Duplikate ({f.duplicates.length})</button>
           </div>
           <div style={{ paddingTop: 10 }}>
+            {tab === "seiten" && isVideo && f.missing === 0 && (
+              videoErr ? (
+                <div className="callout warn" style={{ fontSize: 12.5, marginBottom: 10 }}>
+                  Dieses Videoformat kann der Browser nicht direkt abspielen. Die Standbilder unten zeigen den Inhalt; zum Abspielen „Original ansehen“ nutzen.
+                </div>
+              ) : (
+                <video className="video-player" src={rawUrl(f.id)} controls preload="metadata" onError={() => setVideoErr(true)}
+                  poster={f.thumbnails.length ? thumbUrl(f.id, 1) : undefined} />
+              )
+            )}
             {tab === "seiten" && (f.thumbnails.length ? (
-              <div className="pages-grid">
+              <div className={`pages-grid ${isVideo ? "frames" : ""}`}>
                 {f.thumbnails.map((t) => (
-                  <div key={t.page} className="page-thumb" onClick={() => setViewer(t.page)}>
-                    <img src={thumbUrl(f.id, t.page)} loading="lazy" alt={`Seite ${t.page}`} />
-                    <span>{t.page}</span>
+                  <div key={t.page} className="page-thumb" onClick={() => setViewer(t.page)} title={t.label ?? `Seite ${t.page}`}>
+                    <img src={thumbUrl(f.id, t.page)} loading="lazy" alt={t.label ?? `Seite ${t.page}`} />
+                    <span>{t.label ? shortLabel(t.label) : t.page}</span>
                   </div>
                 ))}
               </div>
@@ -210,7 +223,8 @@ export default function FileDetail({ id, onClose, onChanged }: { id: number; onC
           <ExternalLink size={14} /> Original ansehen (nur lesen)
         </a>
       </div>
-      {viewer && <PageViewer fileId={f.id} name={f.name} pages={f.thumbnails.length} start={viewer} onClose={() => setViewer(null)} />}
+      {viewer && <PageViewer fileId={f.id} name={f.name} pages={f.thumbnails.length} start={viewer} onClose={() => setViewer(null)}
+        labels={f.thumbnails.map((t) => t.label)} video={isVideo} />}
     </div>
   );
 }

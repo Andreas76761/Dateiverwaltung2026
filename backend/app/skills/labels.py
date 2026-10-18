@@ -21,6 +21,7 @@ PATTERNS: list[tuple[str, re.Pattern]] = [
     ("Ausweis", re.compile(r"\b(personalausweis|reisepass|führerschein|aufenthaltstitel)\b", re.I)),
     ("Präsentation", re.compile(r"--- Folie \d+ ---")),
     ("KI", re.compile(r"\b(llm|gpt|claude|prompt|embedding|genai|künstliche intelligenz)\b", re.I)),
+    ("Anhang", re.compile(r"Anhänge: ")),
     ("Entwurf", re.compile(r"\b(entwurf|draft|v0\.\d|wip)\b", re.I)),
 ]
 AMOUNT = re.compile(r"\d{1,3}(?:\.\d{3})*,\d{2}\s?(?:€|EUR)|(?:€|EUR)\s?\d", re.I)

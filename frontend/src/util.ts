@@ -53,3 +53,12 @@ export function shortPath(p: string | null | undefined, keep = 3, dropFile = fal
 export function relTo(p: string, root: string): string {
   return p.startsWith(root) ? p.slice(root.length).replace(/^[\\/]/, "") : p;
 }
+
+/** Kurzes Seiten-Label für Miniaturen: "Anhang: rechnung.pdf · S. 2" → "📎 2", "E-Mail · S. 1" → "✉ 1", Video "1:23" bleibt */
+export function shortLabel(label: string | null | undefined, page?: number): string {
+  if (!label) return page ? String(page) : "";
+  const pg = label.match(/S\. (\d+)$/)?.[1];
+  if (label.startsWith("Anhang")) return `📎${pg ? " " + pg : ""}`;
+  if (label.startsWith("E-Mail")) return `✉${pg ? " " + pg : ""}`;
+  return label;
+}

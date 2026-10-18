@@ -40,11 +40,11 @@ def analyze_file(f: dict, local: bool) -> dict:
                 with db.tx() as c:
                     c.execute("DELETE FROM thumbnails WHERE file_id=?", (f["id"],))  # nur DB-Cache
                     c.executemany(
-                        "INSERT INTO thumbnails(file_id, page, path, width, height) VALUES (?,?,?,?,?)",
-                        [(f["id"], t["page"], t["path"], t["width"], t["height"]) for t in thumbs],
+                        "INSERT INTO thumbnails(file_id, page, path, width, height, label) VALUES (?,?,?,?,?,?)",
+                        [(f["id"], t["page"], t["path"], t["width"], t["height"], t.get("label")) for t in thumbs],
                     )
                 stat["miniaturen"] = len(thumbs)
-                if thumbs and f["ext"] in thumbnails.OFFICE_PAGED:
+                if thumbs and (f["ext"] in thumbnails.OFFICE_PAGED or f["ext"] in thumbnails.mail.MAIL_EXTS):
                     pages = len(thumbs)  # gedruckte Seiten (bei XLSX sonst nur Anzahl der Blätter)
             except Exception as exc:
                 err = (err + "; " if err else "") + f"Miniatur: {exc}"
@@ -108,7 +108,7 @@ def copy_analysis(src_id: int, f: dict) -> None:
         c.execute("DELETE FROM labels WHERE file_id=? AND source!='nutzer'", (f["id"],))
         c.executemany("INSERT OR IGNORE INTO labels(file_id, label, source) VALUES (?,?, 'llm')", [(f["id"], l) for l in labels])
         c.execute("DELETE FROM thumbnails WHERE file_id=?", (f["id"],))
-        c.execute("INSERT INTO thumbnails(file_id, page, path, width, height) SELECT ?, page, path, width, height FROM thumbnails WHERE file_id=?",
+        c.execute("INSERT INTO thumbnails(file_id, page, path, width, height, label) SELECT ?, page, path, width, height, label FROM thumbnails WHERE file_id=?",
                   (f["id"], src_id))
 
 

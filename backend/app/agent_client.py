@@ -130,20 +130,16 @@ class Agent:
 
         with tempfile.TemporaryDirectory() as tmp:
             try:
-                if ext == ".pdf":
-                    pages = thumbnails._render_pdf(path, Path(tmp), 200)
-                elif ext in thumbnails.IMAGE_EXTS:
-                    pages = thumbnails._render_image(path, Path(tmp))
-                else:
-                    pdf = thumbnails._office_to_pdf(path)
-                    pages = thumbnails._render_pdf(str(pdf), Path(tmp), 200, sheet=ext in thumbnails.SHEET_EXTS) if pdf else []
+                pages = thumbnails.render_to(path, ext, Path(tmp))
             except Exception as exc:
                 print("  ! Miniatur", path, exc)
                 return
             if pages:
                 files = [("files", (Path(p["path"]).name, open(p["path"], "rb"), "image/jpeg")) for p in pages]
+                labels = json.dumps([p.get("label") for p in pages])
                 try:
-                    self.http.post(f"/api/agents/{self.computer}/thumbs/{file_id}", files=files).raise_for_status()
+                    self.http.post(f"/api/agents/{self.computer}/thumbs/{file_id}", files=files,
+                                   data={"labels": labels}).raise_for_status()
                 finally:
                     for _, (_, fh, _) in files:
                         fh.close()

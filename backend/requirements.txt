@@ -11,3 +11,5 @@ pillow>=10.0
 pytesseract>=0.3.10
 anthropic>=1.0
 pytest>=8.0
+imageio-ffmpeg>=0.5
+olefile>=0.47

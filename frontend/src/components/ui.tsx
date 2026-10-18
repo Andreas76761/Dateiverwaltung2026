@@ -110,7 +110,9 @@ export function Modal({ onClose, title, children, actions }: { onClose: () => vo
   );
 }
 
-export function PageViewer({ fileId, name, pages, start, onClose }: { fileId: number; name: string; pages: number; start: number; onClose: () => void }) {
+export function PageViewer({ fileId, name, pages, start, onClose, labels, video }: {
+  fileId: number; name: string; pages: number; start: number; onClose: () => void; labels?: (string | null)[]; video?: boolean;
+}) {
   const [p, setP] = useState(start);
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -127,7 +129,9 @@ export function PageViewer({ fileId, name, pages, start, onClose }: { fileId: nu
       actions={
         <div className="row">
           <button className="btn sm" disabled={p <= 1} onClick={() => setP(p - 1)}><ChevronLeft size={15} /></button>
-          <span className="muted nowrap" style={{ fontSize: 12.5 }}>Seite {p} / {pages}</span>
+          <span className="muted nowrap" style={{ fontSize: 12.5 }}>
+            {video ? "Bild" : "Seite"} {p} / {pages}{labels?.[p - 1] ? ` · ${labels[p - 1]}` : ""}
+          </span>
           <button className="btn sm" disabled={p >= pages} onClick={() => setP(p + 1)}><ChevronRight size={15} /></button>
         </div>
       }

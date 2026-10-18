@@ -28,6 +28,7 @@ export interface FileItem {
   missing: number;
   labels: string[];
   thumbs: number;
+  thumb_labels: string[]; // Video-Zeitpunkte bzw. "E-Mail · S. 1" / "Anhang: …"
   computer_name: string;
   volume_name: string;
   volume_kind: string;
@@ -44,7 +45,7 @@ export interface FileDetail extends FileItem {
   scanned_at: string | null;
   mime: string;
   label_details: { label: string; source: string }[];
-  thumbnails: { page: number; width: number; height: number }[];
+  thumbnails: { page: number; width: number; height: number; label: string | null }[];
   duplicates: { id: number; path: string; computer_name: string; volume_name: string; mtime: string; is_primary: number }[];
   copies: CopyOp[];
   target_root: string;

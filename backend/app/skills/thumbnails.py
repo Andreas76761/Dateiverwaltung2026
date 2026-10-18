@@ -1,4 +1,5 @@
-"""Skill: Miniaturansichten ALLER Seiten von PDF, PPTX, DOCX, XLSX (über LibreOffice) und Bildern."""
+"""Skill: Miniaturansichten ALLER Seiten von PDF, PPTX, DOCX, XLSX (über LibreOffice), Bildern,
+Videos (Standbilder über die Laufzeit) und E-Mails (Mail-Seiten + Seiten der Anhänge)."""
 from __future__ import annotations
 
 import hashlib
@@ -8,6 +9,7 @@ import tempfile
 from pathlib import Path
 
 from ..config import get_settings
+from . import mail, video
 from .filetype import IMAGE_EXTS, OFFICE_PAGED
 
 THUMB_WIDTH = 900  # scharf genug für die Großansicht, klein genug für Listen
@@ -44,7 +46,8 @@ def _office_to_pdf(path: str) -> Path | None:
     return None
 
 
-def _render_pdf(pdf: str, out_dir: Path, max_pages: int, sheet: bool = False) -> list[dict]:
+def _render_pdf(pdf: str, out_dir: Path, max_pages: int, sheet: bool = False, start: int = 0,
+                label: str | None = None) -> list[dict]:
     """Rendert jede Seite. Bei Tabellenblättern (beliebige Größe) wird das Format auf
     Querformat … A4-Hochformat begrenzt: flache Blätter weiß auffüllen, lange oben anschneiden."""
     import pymupdf
@@ -64,7 +67,10 @@ def _render_pdf(pdf: str, out_dir: Path, max_pages: int, sheet: bool = False) ->
                 if rect.height > max_h:
                     clip = pymupdf.Rect(rect.x0, rect.y0, rect.x1, rect.y0 + max_h)
             pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False, clip=clip)
-            p = out_dir / f"p{i + 1:04d}.jpg"
+            p = out_dir / f"p{start + i + 1:04d}.jpg"
+            meta = {"page": start + i + 1, "path": str(p)}
+            if label:
+                meta["label"] = f"{label} · S. {i + 1}" if doc.page_count > 1 else label
             if sheet:
                 img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
                 w = THUMB_WIDTH  # einheitliche Blattbreite, Inhalt oben links wie auf einem Ausdruck
@@ -72,22 +78,74 @@ def _render_pdf(pdf: str, out_dir: Path, max_pages: int, sheet: bool = False) ->
                 canvas = Image.new("RGB", (w, h), "white")
                 canvas.paste(img, (SHEET_MARGIN, SHEET_MARGIN))
                 canvas.save(p, "JPEG", quality=78)
-                res.append({"page": i + 1, "path": str(p), "width": w, "height": h})
+                res.append({**meta, "width": w, "height": h})
             else:
                 pix.save(str(p), jpg_quality=72)
-                res.append({"page": i + 1, "path": str(p), "width": pix.width, "height": pix.height})
+                res.append({**meta, "width": pix.width, "height": pix.height})
     return res
 
 
-def _render_image(path: str, out_dir: Path) -> list[dict]:
+def _render_image(path, out_dir: Path, start: int = 0, label: str | None = None) -> list[dict]:
+    """path darf ein Dateipfad oder ein Dateiobjekt (z. B. Mail-Anhang im Speicher) sein."""
     from PIL import Image, ImageOps
 
     with Image.open(path) as im:
         im = ImageOps.exif_transpose(im).convert("RGB")
         im.thumbnail((THUMB_WIDTH, THUMB_WIDTH * 2))
-        p = out_dir / "p0001.jpg"
+        p = out_dir / f"p{start + 1:04d}.jpg"
         im.save(p, "JPEG", quality=75)
-        return [{"page": 1, "path": str(p), "width": im.width, "height": im.height}]
+        r = {"page": start + 1, "path": str(p), "width": im.width, "height": im.height}
+        return [{**r, "label": label} if label else r]
+
+
+def _render_mail(path: str, out_dir: Path, max_pages: int) -> list[dict]:
+    """E-Mail-Seiten (Kopf, Text, Anhangsliste) und danach alle Seiten der Anhänge."""
+    import io
+
+    m = mail.parse(path)
+    res: list[dict] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        mail_pdf = Path(tmp) / "mail.pdf"
+        mail.render_pdf(m, mail_pdf)
+        res += _render_pdf(str(mail_pdf), out_dir, max_pages, label="E-Mail")
+        for i, a in enumerate(m["attachments"]):
+            if len(res) >= max_pages or not a["data"]:
+                continue
+            ext = Path(a["name"]).suffix.lower()
+            lbl = f"Anhang: {a['name']}"
+            try:
+                if ext == ".pdf" or a["mime"] == "application/pdf":
+                    f = Path(tmp) / f"a{i}.pdf"
+                    f.write_bytes(a["data"])
+                    res += _render_pdf(str(f), out_dir, max_pages - len(res), start=len(res), label=lbl)
+                elif ext in IMAGE_EXTS:
+                    res += _render_image(io.BytesIO(a["data"]), out_dir, start=len(res), label=lbl)
+                elif ext in OFFICE_PAGED:
+                    f = Path(tmp) / f"a{i}{ext}"
+                    f.write_bytes(a["data"])
+                    pdf = _office_to_pdf(str(f))
+                    if pdf:
+                        res += _render_pdf(str(pdf), out_dir, max_pages - len(res), sheet=ext in SHEET_EXTS,
+                                           start=len(res), label=lbl)
+            except Exception:
+                continue  # defekter Anhang darf die Mail-Vorschau nicht verhindern
+    return res
+
+
+def render_to(path: str, ext: str, out_dir: Path, max_pages: int = 200, video_frames: int = 8) -> list[dict]:
+    """Alle Seiten/Standbilder einer Datei als JPEG in out_dir. Wird auch vom Agenten genutzt."""
+    if ext == ".pdf":
+        return _render_pdf(path, out_dir, max_pages)
+    if ext in OFFICE_PAGED:
+        pdf = _office_to_pdf(path)
+        return _render_pdf(str(pdf), out_dir, max_pages, sheet=ext in SHEET_EXTS) if pdf else []
+    if ext in IMAGE_EXTS:
+        return _render_image(path, out_dir)
+    if ext in video.VIDEO_EXTS:
+        return video.frames(path, out_dir, THUMB_WIDTH, video_frames)
+    if ext in mail.MAIL_EXTS:
+        return _render_mail(path, out_dir, max_pages)
+    return []
 
 
 def generate(file_id: int, path: str, ext: str) -> list[dict]:
@@ -98,16 +156,10 @@ def generate(file_id: int, path: str, ext: str) -> list[dict]:
     if out_dir.exists():
         shutil.rmtree(out_dir)  # nur eigener Cache im Datenverzeichnis
     out_dir.mkdir(parents=True)
-    max_pages = int(s.analysis.get("thumbnail_max_pages", 200))
-    if ext == ".pdf":
-        return _render_pdf(path, out_dir, max_pages)
-    if ext in OFFICE_PAGED:
-        pdf = _office_to_pdf(path)
-        return _render_pdf(str(pdf), out_dir, max_pages, sheet=ext in SHEET_EXTS) if pdf else []
-    if ext in IMAGE_EXTS:
-        return _render_image(path, out_dir)
-    return []
+    return render_to(path, ext, out_dir, int(s.analysis.get("thumbnail_max_pages", 200)),
+                     int(s.analysis.get("video_frames", 8)))
 
 
 def supports(ext: str) -> bool:
-    return ext == ".pdf" or ext in OFFICE_PAGED or ext in IMAGE_EXTS
+    return (ext == ".pdf" or ext in OFFICE_PAGED or ext in IMAGE_EXTS or ext in mail.MAIL_EXTS
+            or (ext in video.VIDEO_EXTS and video.available()))

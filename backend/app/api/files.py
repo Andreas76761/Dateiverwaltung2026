@@ -70,11 +70,13 @@ LIST_COLS = """f.id, f.computer_id, f.volume_id, f.path, f.rel_path, f.name, f.e
   f.review_status, f.dup_count, f.is_primary, f.status, f.pinned, f.missing,
   (SELECT group_concat(label, '|') FROM labels l WHERE l.file_id=f.id) labels,
   (SELECT COUNT(*) FROM thumbnails t WHERE t.file_id=f.id) thumbs,
+  (SELECT group_concat(COALESCE(t.label, ''), '|') FROM thumbnails t WHERE t.file_id=f.id AND f.file_type IN ('Video', 'E-Mail')) thumb_labels,
   c.name computer_name, v.name volume_name, v.kind volume_kind"""
 
 
 def _row(r: dict) -> dict:
     r["labels"] = sorted(set(r["labels"].split("|"))) if r.get("labels") else []
+    r["thumb_labels"] = r["thumb_labels"].split("|") if r.get("thumb_labels") else []
     return r
 
 
@@ -144,7 +146,7 @@ def file_detail(file_id: int):
         raise HTTPException(404, "Datei nicht gefunden")
     f = _row(f)
     f["label_details"] = db.query("SELECT label, source FROM labels WHERE file_id=? ORDER BY label", (file_id,))
-    f["thumbnails"] = db.query("SELECT page, width, height FROM thumbnails WHERE file_id=? ORDER BY page", (file_id,))
+    f["thumbnails"] = db.query("SELECT page, width, height, label FROM thumbnails WHERE file_id=? ORDER BY page", (file_id,))
     f["duplicates"] = db.query(
         """SELECT f.id, f.path, f.computer_id, c.name computer_name, v.name volume_name, f.mtime, f.is_primary
            FROM files f JOIN computers c ON c.id=f.computer_id JOIN volumes v ON v.id=f.volume_id

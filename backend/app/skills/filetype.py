@@ -10,7 +10,7 @@ TYPES = {
     "Tabelle": [".xlsx", ".xls", ".xlsm", ".ods", ".csv", ".numbers"],
     "Text & Notizen": [".txt", ".md", ".markdown", ".rst", ".log", ".org"],
     "Bild": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".heic", ".svg", ".raw", ".cr2", ".nef", ".arw", ".dng"],
-    "Video": [".mp4", ".mov", ".avi", ".mkv", ".m4v", ".wmv", ".webm"],
+    "Video": [".mp4", ".mov", ".avi", ".mkv", ".m4v", ".wmv", ".webm", ".mpg", ".mpeg", ".3gp", ".mts"],
     "Audio": [".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg"],
     "E-Mail": [".eml", ".msg"],
     "Quellcode": [".py", ".js", ".ts", ".tsx", ".jsx", ".java", ".cs", ".go", ".rs", ".cpp", ".c", ".h", ".php", ".rb", ".sql", ".sh", ".ps1", ".html", ".css", ".ipynb"],
@@ -24,7 +24,7 @@ EXT_TO_TYPE = {e: t for t, exts in TYPES.items() for e in exts}
 
 TEXT_EXTS = {".txt", ".md", ".markdown", ".rst", ".csv", ".json", ".jsonl", ".yaml", ".yml", ".xml", ".toml",
              ".ini", ".conf", ".log", ".py", ".js", ".ts", ".tsx", ".jsx", ".java", ".cs", ".go", ".rs", ".cpp",
-             ".c", ".h", ".php", ".rb", ".sql", ".sh", ".ps1", ".html", ".css", ".eml", ".org", ".env"}
+             ".c", ".h", ".php", ".rb", ".sql", ".sh", ".ps1", ".html", ".css", ".org", ".env"}
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp"}
 OFFICE_PAGED = {".pptx", ".ppt", ".odp", ".pps", ".ppsx", ".docx", ".doc", ".odt", ".rtf", ".xlsx", ".xls", ".ods"}
 

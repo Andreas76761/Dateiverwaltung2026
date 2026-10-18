@@ -6,8 +6,9 @@ import { FileIcon, FileThumbOrIcon, GroupBadge, Importance, Labels, PageViewer, 
 import type { Computer, FileItem, FileList } from "../types";
 
 // Dateitypen mit Seitenvorschau (Office über LibreOffice → PDF → alle Seiten)
-const PREVIEW_EXTS = ".pdf,.pptx,.ppt,.ppsx,.odp,.docx,.doc,.odt,.rtf,.xlsx,.xls,.xlsm,.ods,.png,.jpg,.jpeg";
-import { fmtBytes, fmtDate, fmtNum, GROUPS } from "../util";
+const PREVIEW_EXTS = ".pdf,.pptx,.ppt,.ppsx,.odp,.docx,.doc,.odt,.rtf,.xlsx,.xls,.xlsm,.ods,.png,.jpg,.jpeg" +
+  ",.mp4,.mov,.avi,.mkv,.m4v,.wmv,.webm,.mpg,.mpeg,.3gp,.mts,.eml,.msg";
+import { fmtBytes, fmtDate, fmtNum, GROUPS, shortLabel } from "../util";
 
 interface Facets {
   categories: { value: string; grp: string; n: number }[];
@@ -21,7 +22,10 @@ const PREVIEW_PAGES = 24; // so viele Seiten je Datei sofort, Rest per Klick
 function PageStrip({ f, selected, onOpen, onPage }: { f: FileItem; selected: boolean; onOpen: () => void; onPage: (p: number) => void }) {
   const [all, setAll] = useState(false);
   const n = all ? f.thumbs : Math.min(f.thumbs, PREVIEW_PAGES);
-  const wide = f.file_type === "Präsentation";
+  const isVideo = f.file_type === "Video";
+  const wide = f.file_type === "Präsentation" || isVideo;
+  const unit = isVideo ? ["Standbild", "Standbilder"] : ["Seite", "Seiten"];
+  const nAtt = new Set(f.thumb_labels.filter((l) => l.startsWith("Anhang")).map((l) => l.replace(/ · S\. \d+$/, ""))).size;
   return (
     <div className={`pv-file ${selected ? "sel" : ""}`}>
       <div className="pv-head" onClick={onOpen}>
@@ -29,7 +33,8 @@ function PageStrip({ f, selected, onOpen, onPage }: { f: FileItem; selected: boo
         <div className="grow">
           <div className="ellipsis" style={{ fontWeight: 600 }}>{f.name}</div>
           <div className="faint ellipsis" style={{ fontSize: 11.5 }}>
-            {f.thumbs > 1 ? `${f.thumbs} Seiten · ` : f.thumbs === 1 ? "1 Seite · " : ""}{f.computer_name} · {f.volume_name} · {fmtDate(f.mtime)} · {fmtBytes(f.size)}
+            {f.thumbs > 1 ? `${f.thumbs} ${unit[1]} · ` : f.thumbs === 1 ? `1 ${unit[0]} · ` : ""}
+            {nAtt > 0 ? `${nAtt} ${nAtt === 1 ? "Anhang" : "Anhänge"} · ` : ""}{f.computer_name} · {f.volume_name} · {fmtDate(f.mtime)} · {fmtBytes(f.size)}
           </div>
         </div>
         <GroupBadge group={f.group_name} />
@@ -40,9 +45,11 @@ function PageStrip({ f, selected, onOpen, onPage }: { f: FileItem; selected: boo
       {f.thumbs > 0 ? (
         <div className="pv-strip">
           {Array.from({ length: n }, (_, i) => i + 1).map((p) => (
-            <div key={p} className={`pv-page ${wide ? "wide" : ""}`} onClick={() => onPage(p)} title={`Seite ${p}`}>
-              <img src={thumbUrl(f.id, p)} loading="lazy" alt={`Seite ${p}`} />
-              {f.thumbs > 1 && <span>{p}</span>}
+            <div key={p} className={`pv-page ${wide ? "wide" : ""} ${f.thumb_labels[p - 1]?.startsWith("Anhang") ? "att" : ""}`}
+              onClick={() => onPage(p)} title={f.thumb_labels[p - 1] || `Seite ${p}`}>
+              <img src={thumbUrl(f.id, p)} loading="lazy" alt={f.thumb_labels[p - 1] || `Seite ${p}`} />
+              {isVideo && <i className="play">▶</i>}
+              {(f.thumbs > 1 || f.thumb_labels[p - 1]) && <span>{shortLabel(f.thumb_labels[p - 1], p)}</span>}
             </div>
           ))}
           {f.thumbs > n && <button className="btn sm pv-more" onClick={() => setAll(true)}>+ {f.thumbs - n} weitere Seiten</button>}
@@ -133,7 +140,7 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
   useEffect(() => {
     try { localStorage.setItem("fdv-tree", showTree ? "1" : "0"); } catch { /* ignore */ }
   }, [showTree]);
-  const [viewer, setViewer] = useState<{ id: number; name: string; pages: number; page: number } | null>(null);
+  const [viewer, setViewer] = useState<{ id: number; name: string; pages: number; page: number; labels: string[]; video: boolean } | null>(null);
   const [limit, setLimit] = useState(150);
   const [detail, setDetail] = useState<number | null>(params.get("file") ? Number(params.get("file")) : null);
   const [openComp, setOpenComp] = useState<Record<string, boolean>>({});
@@ -235,12 +242,12 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
           <div className="seg">
             <button className={view === "list" ? "on" : ""} onClick={() => setView("list")}><List size={14} /> Liste</button>
             <button className={view === "grid" ? "on" : ""} onClick={() => setView("grid")}><LayoutGrid size={14} /> Galerie</button>
-            <button className={view === "pages" ? "on" : ""} onClick={() => { setView("pages"); setPreviewOnly(true); }} title="Alle Seiten von PDF, PPTX, DOCX, XLSX, PNG, JPEG als Miniaturen"><GalleryHorizontal size={14} /> Seiten</button>
+            <button className={view === "pages" ? "on" : ""} onClick={() => { setView("pages"); setPreviewOnly(true); }} title="Alle Seiten/Standbilder von PDF, Office, Bildern, Videos und E-Mails als Miniaturen"><GalleryHorizontal size={14} /> Seiten</button>
           </div>
         </div>
         <div className="filterbar">
-          <button className={`chip ${previewOnly ? "on" : ""}`} onClick={() => setPreviewOnly(!previewOnly)} title="Nur Dateien mit Seitenvorschau: PDF, PPTX, DOCX, XLSX, PNG, JPEG">
-            <Images size={12} /> PDF · PPTX · DOCX · XLSX · PNG · JPEG
+          <button className={`chip ${previewOnly ? "on" : ""}`} onClick={() => setPreviewOnly(!previewOnly)} title="Nur Dateien mit Vorschau: PDF, PPTX, DOCX, XLSX, PNG, JPEG, Videos (Standbilder), E-Mails (inkl. Anhänge)">
+            <Images size={12} /> PDF · Office · Bilder · Videos · E-Mails
           </button>
           {GROUPS.map((g) => (
             <button key={g} className={`chip ${group === g ? "on" : ""}`} onClick={() => setGroup(group === g ? "" : g)}>
@@ -283,7 +290,7 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
             <div className="pages-view">
               {items.map((f) => (
                 <PageStrip key={f.id} f={f} selected={detail === f.id} onOpen={() => setDetail(f.id)}
-                  onPage={(p) => setViewer({ id: f.id, name: f.name, pages: f.thumbs, page: p })} />
+                  onPage={(p) => setViewer({ id: f.id, name: f.name, pages: f.thumbs, page: p, labels: f.thumb_labels, video: f.file_type === "Video" })} />
               ))}
             </div>
           ) : view === "list" ? (
@@ -331,7 +338,8 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
                 <div key={f.id} className={`tile ${detail === f.id ? "sel" : ""}`} onClick={() => setDetail(f.id)}>
                   <div className="tile-img">
                     {f.thumbs ? <img src={thumbUrl(f.id, 1)} loading="lazy" alt="" /> : <div style={{ transform: "scale(1.6)" }}><FileIcon type={f.file_type} ext={f.ext} /></div>}
-                    {f.thumbs > 1 && <span className="pages">{f.thumbs} Seiten</span>}
+                    {f.thumbs > 1 && <span className="pages">{f.thumbs} {f.file_type === "Video" ? "Standbilder" : "Seiten"}</span>}
+                    {f.file_type === "Video" && f.thumbs > 0 && <i className="play big">▶</i>}
                     <span className="imp-pill"><span className="badge" style={{ background: "rgba(15,23,42,.75)", color: "white" }}>★ {f.importance}</span></span>
                   </div>
                   <div className="tile-body">
@@ -355,7 +363,7 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
         </div>
       </div>
 
-      {viewer && <PageViewer fileId={viewer.id} name={viewer.name} pages={viewer.pages} start={viewer.page} onClose={() => setViewer(null)} />}
+      {viewer && <PageViewer fileId={viewer.id} name={viewer.name} pages={viewer.pages} start={viewer.page} onClose={() => setViewer(null)} labels={viewer.labels} video={viewer.video} />}
       {detail && <FileDetail id={detail} onClose={() => setDetail(null)} onChanged={() => setTick((t) => t + 1)} />}
     </div>
   );

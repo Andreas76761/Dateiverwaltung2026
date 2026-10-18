@@ -24,7 +24,7 @@ Erweiterung: `inventory_agent` – installierte Programme, LLM-Lösungen (Ollama
 
 `start.sh` installiert die Python-Pakete, baut das Frontend und erzeugt Demo-Daten unter `./demo`. Dann in der Übersicht nacheinander **1 Einlesen → 2 Analysieren → 3 Vorschlag** starten, unter *Vorschlag & Prüfung* Ordner/Dateien freigeben und unter *Kopieren & Statistik* die Kopien erstellen.
 
-Optionale Systemprogramme: **Tesseract** (OCR, Sprachpaket `deu`) und **LibreOffice** (Miniaturen für PPTX/DOCX/XLSX). Ohne sie läuft alles weiter, nur ohne OCR bzw. ohne Office-Miniaturen.
+Optionale Systemprogramme: **Tesseract** (OCR, Sprachpaket `deu`) und **LibreOffice** (Miniaturen für PPTX/DOCX/XLSX). Für Videos wird ffmpeg genutzt – aus dem PATH oder automatisch über das Python-Paket `imageio-ffmpeg`. Ohne sie läuft alles weiter, nur ohne OCR bzw. ohne Office-Miniaturen.
 
 ## Eigene Computer & Festplatten
 
@@ -97,7 +97,7 @@ backend/app
 frontend/                React + TypeScript + Vite
 ```
 
-Frontend-Ansichten: Übersicht (Pipeline, KPIs) · Explorer (Baum Computer › Festplatte › Ordner, Suche in Name/Inhalt/OCR/Labels, Filter nach Bereich, 50 Kategorien, Dateityp, Label, Speicherdatum, Duplikaten, Prüfstatus; Sortierung nach Wichtigkeit, Datum, Typ …; Liste/Galerie/**Seiten** – in der Seitenansicht sind bei PDF, PPTX, DOCX, XLSX (ein Bild je Tabellenblatt), PNG und JPEG alle Seiten direkt als Miniaturen sichtbar, Klick öffnet die Großansicht mit ←/→; Navigation und Ordnerbaum einklappbar (Strg+B); Detail mit Miniaturen aller Seiten, Labels, OCR, Duplikaten, Zielpfad) · Vorschlag & Prüfung · Kopieren & Statistik · Quellen & Agenten · Programme & LLMs · Einstellungen.
+Frontend-Ansichten: Übersicht (Pipeline, KPIs) · Explorer (Baum Computer › Festplatte › Ordner, Suche in Name/Inhalt/OCR/Labels, Filter nach Bereich, 50 Kategorien, Dateityp, Label, Speicherdatum, Duplikaten, Prüfstatus; Sortierung nach Wichtigkeit, Datum, Typ …; Liste/Galerie/**Seiten** – in der Seitenansicht sind bei PDF, PPTX, DOCX, XLSX (ein Bild je Tabellenblatt), PNG und JPEG alle Seiten direkt als Miniaturen sichtbar, bei **Videos** Standbilder über die Laufzeit (mit Zeitmarke, Player im Detail) und bei **E-Mails** (.eml, Outlook .msg) die Mail-Seite plus alle Seiten der Anhänge, Klick öffnet die Großansicht mit ←/→; Navigation und Ordnerbaum einklappbar (Strg+B); Detail mit Miniaturen aller Seiten, Labels, OCR, Duplikaten, Zielpfad) · Vorschlag & Prüfung · Kopieren & Statistik · Quellen & Agenten · Programme & LLMs · Einstellungen.
 
 ## Entwicklung
 

@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS thumbnails (
     page INTEGER NOT NULL,
     path TEXT NOT NULL,
     width INTEGER, height INTEGER,
+    label TEXT,                        -- z. B. Video-Zeitpunkt "1:23" oder "Anhang: rechnung.pdf"
     PRIMARY KEY (file_id, page)
 );
 
@@ -191,9 +192,19 @@ def audit(action: str, detail: Any = None, actor: str = "system") -> None:
         )
 
 
+MIGRATIONS = [
+    "ALTER TABLE thumbnails ADD COLUMN label TEXT",
+]
+
+
 def init_db() -> None:
     with tx() as c:
         c.executescript(SCHEMA)
+        for m in MIGRATIONS:  # bestehende Datenbanken älterer Versionen nachrüsten
+            try:
+                c.execute(m)
+            except sqlite3.OperationalError:
+                pass  # Spalte existiert bereits
     sync_config_to_db()
 
 
