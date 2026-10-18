@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bot, CheckCircle2, KeyRound, Save, ShieldCheck, XCircle } from "lucide-react";
+import { Bot, CheckCircle2, KeyRound, Loader2, Save, ShieldCheck, XCircle, Zap } from "lucide-react";
 import { apiKey, get, post, setApiKey } from "../api";
 import { useAsync, useToast } from "../components/ui";
 import { fmtNum, GROUPS } from "../util";
@@ -11,6 +11,20 @@ export default function Settings() {
   const cats = useAsync<any[]>(() => get("/api/categories"), []);
   const [form, setForm] = useState<any>(null);
   const [key, setKey] = useState(apiKey());
+  const [test, setTest] = useState<any>(null);
+  const [testing, setTesting] = useState(false);
+  const runTest = async () => {
+    setTesting(true);
+    setTest(null);
+    try {
+      await post("/api/settings", form); // aktuelle Auswahl zuerst speichern
+      setTest(await post("/api/settings/test-llm", { provider: form.provider }));
+    } catch (e: any) {
+      setTest({ ok: false, error: e.message });
+    } finally {
+      setTesting(false);
+    }
+  };
   useEffect(() => {
     if (s.data) setForm({ provider: s.data.llm.provider, anthropic_model: s.data.llm.anthropic_model, ollama_url: s.data.llm.ollama_url, ollama_model: s.data.llm.ollama_model, send_content_to_cloud: s.data.llm.send_content_to_cloud, target_structure: s.data.target_structure, ocr: s.data.analysis.ocr });
   }, [s.data]);
@@ -56,6 +70,25 @@ export default function Settings() {
               <label className="col" style={{ gap: 4 }}><span className="faint" style={{ fontSize: 12 }}>Ollama-URL</span><input className="input mono" value={form.ollama_url} onChange={(e) => setForm({ ...form, ollama_url: e.target.value })} /></label>
               <label className="col" style={{ gap: 4 }}><span className="faint" style={{ fontSize: 12 }}>Modell</span><input className="input mono" value={form.ollama_model} onChange={(e) => setForm({ ...form, ollama_model: e.target.value })} /></label>
               <div className="callout ok" style={{ gridColumn: "span 2", fontSize: 12.5 }}><ShieldCheck size={16} /> Inhalte verlassen den Computer nicht.</div>
+            </div>
+          )}
+          <div className="row">
+            <button className="btn" disabled={testing} onClick={runTest}>{testing ? <Loader2 size={14} className="spin" /> : <Zap size={14} />} Verbindung testen</button>
+            <span className="faint" style={{ fontSize: 12 }}>analysiert eine Beispieldatei (Mietvertrag) ohne Fallback</span>
+          </div>
+          {test && (
+            <div className={`callout ${test.ok ? "ok" : "warn"}`} style={{ fontSize: 12.5, flexDirection: "column", gap: 4 }}>
+              {test.ok ? (
+                <>
+                  <b>✓ {test.provider}{test.model ? ` · ${test.usage?.model ?? test.model}` : ""} antwortet ({test.ms} ms)</b>
+                  <span>Kategorie: <b>{test.result.category_id}</b> · Sicherheit {Math.round(test.result.confidence * 100)} % · Wichtigkeit {test.result.importance}</span>
+                  <span>Labels: {test.result.labels.join(", ")}</span>
+                  <span className="muted">{test.result.summary}</span>
+                  {test.usage && <span className="faint">Tokens: {test.usage.input} ein · {test.usage.output} aus{test.usage.cache_read ? ` · ${test.usage.cache_read} aus Cache` : ""}</span>}
+                </>
+              ) : (
+                <><b>✗ Verbindung fehlgeschlagen ({test.provider ?? "LLM"})</b><span>{test.error}</span></>
+              )}
             </div>
           )}
           {form.provider === "rules" && <div className="callout" style={{ fontSize: 12.5 }}>Schlüsselwort- und Endungsbasierte Klassifikation – kostenlos, offline, schnell. Dient auch als automatischer Fallback, wenn ein LLM nicht erreichbar ist.</div>}

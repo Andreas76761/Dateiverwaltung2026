@@ -125,6 +125,17 @@ def update_settings(body: SettingsIn):
     return settings()
 
 
+class TestLlmIn(BaseModel):
+    provider: Optional[str] = None
+
+
+@router.post("/settings/test-llm")
+def test_llm(body: TestLlmIn):
+    """Verbindung zum LLM prüfen: analysiert eine Beispieldatei ohne Fallback."""
+    from .. import llm
+    return llm.test_connection(body.provider)
+
+
 def _persist_overrides():
     s = get_settings()
     p = s.data_dir / "overrides.json"

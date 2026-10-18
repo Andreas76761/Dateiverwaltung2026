@@ -80,7 +80,10 @@ export default function Dashboard({ go }: { go: (page: string) => void }) {
               ) : (
                 <div className="stats">
                   {j?.kind === "scan" && <><span>{fmtNum(j.stats.dateien)} Dateien</span><span>{fmtNum(j.stats.duplikatgruppen)} Duplikatgruppen</span></>}
-                  {j?.kind === "analyze" && <><span>{fmtNum(j.stats.analysiert)} analysiert</span><span>{fmtNum(j.stats.miniaturen)} Seiten</span><span>{fmtNum(j.stats.ocr)} OCR</span></>}
+                  {j?.kind === "analyze" && <><span>{fmtNum(j.stats.analysiert)} analysiert</span><span>{fmtNum(j.stats.miniaturen)} Seiten</span><span>{fmtNum(j.stats.ocr)} OCR</span><span>LLM: {j.stats.provider}</span></>}
+                  {j?.kind === "analyze" && j.stats.llm_fallback > 0 && (
+                    <span style={{ color: "var(--warn)" }} title={j.stats.llm_fehler}>⚠ {fmtNum(j.stats.llm_fallback)}× Offline-Regeln statt LLM: {j.stats.llm_fehler}</span>
+                  )}
                   {j?.kind === "propose" && <><span>{fmtNum(j.stats.zielordner)} Zielordner</span><span>{fmtNum(j.stats.dateien_im_vorschlag)} Dateien</span></>}
                   {j?.kind === "copy" && <><span>{fmtNum(j.stats.kopiert)} kopiert</span><span>{fmtNum(j.stats["übersprungen"])} übersprungen</span><span>{fmtBytes(j.stats.bytes)}</span></>}
                 </div>

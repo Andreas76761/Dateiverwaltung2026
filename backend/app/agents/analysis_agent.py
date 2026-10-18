@@ -23,7 +23,7 @@ def _local_computers() -> set[str]:
 
 def analyze_file(f: dict, local: bool) -> dict:
     """Analysiert eine Datei und schreibt das Ergebnis. Gibt eine kleine Statistik zurück."""
-    stat = {"ocr": 0, "miniaturen": 0, "fehler": 0}
+    stat = {"ocr": 0, "miniaturen": 0, "fehler": 0, "llm_fallback": 0}
     text, pages, ocr_text, err = f.get("text_excerpt") or "", f.get("page_count"), "", None
     readable = local and os.path.isfile(f["path"])
     if readable:
@@ -52,6 +52,8 @@ def analyze_file(f: dict, local: bool) -> dict:
     full_text = (text + " " + ocr_text).strip()
     meta = {**f, "page_count": pages}
     result, provider = llm.analyze(meta, full_text)
+    if provider.endswith("(Fallback)"):
+        stat["llm_fallback"] = 1
     cat = BY_ID[result["category_id"]]
 
     labels = {l for l in result["labels"]} | rule_labels(f["name"], full_text)
@@ -122,7 +124,9 @@ def run(job: Job, params: dict) -> dict:
     files = db.query(f"SELECT * FROM files WHERE {where} ORDER BY id", args)
     local = _local_computers()
     total = len(files)
-    stats = {"analysiert": 0, "ocr": 0, "miniaturen": 0, "fehler": 0, "provider": get_settings().llm["provider"]}
+    stats = {"analysiert": 0, "ocr": 0, "miniaturen": 0, "fehler": 0, "provider": get_settings().llm["provider"],
+             "llm_fallback": 0}
+    llm.reset()
     job.update(progress=0, total=total, message=f"{total} Dateien werden analysiert", **stats)
 
     # Duplikate nur einmal analysieren
@@ -149,8 +153,10 @@ def run(job: Job, params: dict) -> dict:
                 break
             try:
                 st = fut.result()
-                for k in ("ocr", "miniaturen", "fehler"):
+                for k in ("ocr", "miniaturen", "fehler", "llm_fallback"):
                     stats[k] += st[k]
+                if llm.last_error:
+                    stats["llm_fehler"] = llm.last_error
                 stats["analysiert"] += 1
             except Exception as exc:
                 f = futs[fut]

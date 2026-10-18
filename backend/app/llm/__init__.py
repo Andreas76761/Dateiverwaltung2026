@@ -97,16 +97,58 @@ def normalize(result: dict) -> dict:
     }
 
 
+# Letzter Fehler des LLM-Providers (für Job-Statistik und UI)
+last_error: str | None = None
+# Nach einem nicht behebbaren Fehler (Key, Modell, Berechtigung) wird der Provider für diesen Lauf übersprungen
+disabled: str | None = None
+
+
+class FatalLLMError(RuntimeError):
+    """Fehler, der sich durch Wiederholen nicht behebt."""
+
+
+def reset() -> None:
+    global last_error, disabled
+    last_error = disabled = None
+
+
 def analyze(meta: dict, text: str) -> tuple[dict, str]:
     """Analysiert mit dem konfigurierten Provider; fällt bei Fehlern auf Regeln zurück."""
+    global last_error, disabled
     provider = get_provider()
     try:
+        if disabled:
+            raise FatalLLMError(disabled)
         return normalize(provider.analyze(meta, text)), provider.name
     except Exception as exc:
+        last_error = f"{provider.name}: {exc}"
+        if isinstance(exc, FatalLLMError) and not disabled:
+            disabled = str(exc)
         log.warning("LLM-Provider %s fehlgeschlagen (%s) – Fallback auf Regeln", provider.name, exc)
         from .rules_provider import RulesProvider
         rp = RulesProvider()
         return normalize(rp.analyze(meta, text)), f"{rp.name} (Fallback)"
+
+
+def test_connection(provider_name: str | None = None) -> dict:
+    """Eine Beispieldatei analysieren – OHNE Fallback, damit Fehler sichtbar werden."""
+    import time
+
+    provider = get_provider(provider_name)
+    meta = {"name": "Mietvertrag_Lindenstr_12.pdf", "path": "C:/Users/andreas/Documents/Wohnung/Mietvertrag_Lindenstr_12.pdf",
+            "computer_name": "Test", "volume_name": "C:", "file_type": "PDF", "ext": ".pdf", "size": 48211,
+            "mtime": "2021-02-01T10:00:00+00:00", "page_count": 3}
+    text = ("Mietvertrag Wohnraum. Zwischen Hausverwaltung Berger GmbH (Vermieter) und Andreas (Mieter). "
+            "Miete 1.150,00 EUR zzgl. Nebenkosten. Kündigungsfrist drei Monate. Unterschrift Vermieter, Unterschrift Mieter.")
+    t0 = time.perf_counter()
+    try:
+        result = normalize(provider.analyze(meta, text))
+        return {"ok": True, "provider": provider.name, "model": getattr(provider, "model", None),
+                "ms": round((time.perf_counter() - t0) * 1000), "result": result,
+                "usage": getattr(provider, "last_usage", None)}
+    except Exception as exc:
+        return {"ok": False, "provider": provider.name, "model": getattr(provider, "model", None),
+                "ms": round((time.perf_counter() - t0) * 1000), "error": str(exc)}
 
 
 def parse_json(text: str) -> dict:

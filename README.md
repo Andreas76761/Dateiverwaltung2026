@@ -68,6 +68,17 @@ In *Einstellungen* wählbar:
 - **Ollama (lokal)** – Inhalte verlassen den Rechner nicht.
 - **Offline-Regeln** – Schlüsselwörter/Endungen, kostenlos; automatischer Fallback bei LLM-Fehlern.
 
+**Claude testen:** `ANTHROPIC_API_KEY` setzen, Server neu starten, dann in *Einstellungen → Verbindung testen* oder per Skript:
+
+```bash
+cd backend
+python ../scripts/test_llm.py                 # nur Metadaten an Claude (Datenschutzmodus)
+python ../scripts/test_llm.py --content       # mit Textauszug – vergleicht Ergebnis mit den Offline-Regeln
+python ../scripts/test_llm.py --model claude-haiku-5-5 "C:/Pfad/zur/Datei.pdf"
+```
+
+Ist der Key ungültig oder das Modell nicht verfügbar, bricht die App die LLM-Aufrufe für den laufenden Analyse-Job sofort ab (keine tausendfachen Fehlversuche) und nutzt die Offline-Regeln; die Übersicht zeigt dann „⚠ n× Offline-Regeln statt LLM“ mit der Ursache.
+
 Identische Dateien (gleicher SHA-256) werden nur **einmal** analysiert – die Duplikate übernehmen das Ergebnis.
 
 ## Architektur
