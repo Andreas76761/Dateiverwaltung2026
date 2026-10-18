@@ -13,7 +13,7 @@ interface Detected {
 }
 interface SetupStatus {
   config_file: string; demo: boolean; target_root: string; structure: string; computers: Comp[]; api_key_set: boolean;
-  detected: Detected; agent_key: string | null; tools: Record<string, boolean>;
+  detected: Detected; agent_key: string | null; tools: Record<string, boolean>; tls_fingerprint: string | null;
 }
 interface Check { path: string; exists: boolean; readable: boolean; files: number; bytes: number; complete: boolean; warnings: string[]; cloud?: boolean }
 
@@ -260,7 +260,7 @@ function Wizard() {
         </div>
       )}
 
-      {result && others.length > 0 && step === 3 && <AgentCommands comps={others} url={d.detected.server_url} keySet={d.agent_key} />}
+      {result && others.length > 0 && step === 3 && <AgentCommands comps={others} url={d.detected.server_url} keySet={d.agent_key} fingerprint={d.tls_fingerprint} />}
 
       <div className="row" style={{ gap: 8 }}>
         <button className="btn" disabled={step === 0} onClick={() => setStep(step - 1)}><ChevronLeft size={14} /> Zurück</button>
@@ -272,7 +272,7 @@ function Wizard() {
   );
 }
 
-function AgentCommands({ comps, url, keySet }: { comps: Comp[]; url: string; keySet: string | null }) {
+function AgentCommands({ comps, url, keySet, fingerprint }: { comps: Comp[]; url: string; keySet: string | null; fingerprint: string | null }) {
   const toast = useToast();
   return (
     <div className="card card-pad col" style={{ gap: 10 }}>
@@ -281,7 +281,7 @@ function AgentCommands({ comps, url, keySet }: { comps: Comp[]; url: string; key
       {comps.map((c, i) => {
         const id = c.id || c.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
         const win = (c.os || "Windows") === "Windows";
-        const cmd = `${win ? ".\\dienst-einrichten.ps1" : "./dienst-einrichten.sh"} agent --server ${url} --computer ${id} --key ${keySet || "<API-KEY>"} --target "${win ? "$env:OneDrive\\Future-Dateiverwaltung" : "~/OneDrive/Future-Dateiverwaltung"}"`;
+        const cmd = `${win ? ".\\dienst-einrichten.ps1" : "./dienst-einrichten.sh"} agent --server ${url} --computer ${id} --key ${keySet || "<API-KEY>"}${fingerprint ? ` --fingerprint ${fingerprint.replace(/:/g, "")}` : ""} --target "${win ? "$env:OneDrive\\Future-Dateiverwaltung" : "~/OneDrive/Future-Dateiverwaltung"}"`;
         return (
           <div key={i} className="col" style={{ gap: 4 }}>
             <b style={{ fontSize: 13 }}>{c.name} <span className="faint" style={{ fontWeight: 400 }}>({c.os || "Windows"})</span></b>
@@ -292,7 +292,7 @@ function AgentCommands({ comps, url, keySet }: { comps: Comp[]; url: string; key
           </div>
         );
       })}
-      {!keySet && <div className="callout warn" style={{ fontSize: 12.5 }}><AlertTriangle size={15} /><span>Noch kein API-Key gesetzt: Für Agenten über das Netzwerk unter „Einstellungen → Zugang“ einen Schlüssel erzeugen.</span></div>}
+      {!keySet && <div className="callout warn" style={{ fontSize: 12.5 }}><AlertTriangle size={15} /><span>Noch kein API-Key gesetzt: Für Agenten über das Netzwerk unter <a href="#/settings">Einstellungen → Zugang & Sicherheit</a> einen Schlüssel erzeugen.</span></div>}
     </div>
   );
 }

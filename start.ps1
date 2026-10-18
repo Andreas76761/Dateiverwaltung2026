@@ -7,4 +7,4 @@ if (-not $py) { Write-Host "Python 3.10+ fehlt: https://www.python.org/downloads
 if (-not (Test-Path frontend\dist)) { Push-Location frontend; npm install; npm run build; Pop-Location }
 if (-not (Test-Path demo) -and -not (Test-Path config\fdv.yaml)) { & $py scripts\make_demo.py }
 Set-Location backend
-& $py -m uvicorn app.main:app --host 0.0.0.0 --port 8800
+& $py -m app.run_server --port 8800   # HTTPS, wenn unter Einstellungen → Zugang eingeschaltet

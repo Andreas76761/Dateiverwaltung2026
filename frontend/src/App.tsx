@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Boxes, CalendarClock, CloudUpload, Copy, FolderKanban, FolderTree, HardDrive, Layers, LayoutDashboard, Loader2, Moon, PanelLeftClose, PanelLeftOpen, Settings as Cog, ShieldCheck, Sun, Wand2 } from "lucide-react";
+import { AuthGate, UserMenu, type AuthStatus } from "./components/Auth";
 import { JobsProvider, ToastProvider, useJobs } from "./components/ui";
 import Automation from "./pages/Automation";
 import CopyPage from "./pages/CopyPage";
@@ -48,7 +49,7 @@ function JobIndicator() {
   );
 }
 
-function Shell() {
+function Shell({ auth, reloadAuth }: { auth: AuthStatus; reloadAuth: () => void }) {
   const [route, setRoute] = useState(parseHash());
   const [theme, setTheme] = useState<string>(() => {
     try { return localStorage.getItem("fdv-theme") || ""; } catch { return ""; }
@@ -117,6 +118,7 @@ function Shell() {
           <b style={{ fontSize: 15 }}>{NAV.find((n) => "id" in n && (n.id === route.raw || n.id === route.page)) && (NAV.find((n) => "id" in n && (n.id === route.raw || n.id === route.page)) as any).label}</b>
           <span className="spacer" />
           <JobIndicator />
+          <UserMenu st={auth} reload={reloadAuth} />
           <button className="btn ghost icon" title="Hell/Dunkel" onClick={() => setTheme(dark ? "light" : "dark")}>{dark ? <Sun size={17} /> : <Moon size={17} />}</button>
         </header>
         <div className={`content ${flush ? "flush" : ""}`}>
@@ -139,9 +141,13 @@ function Shell() {
 export default function App() {
   return (
     <ToastProvider>
-      <JobsProvider>
-        <Shell />
-      </JobsProvider>
+      <AuthGate>
+        {(st, reload) => (
+          <JobsProvider>
+            <Shell auth={st} reloadAuth={reload} />
+          </JobsProvider>
+        )}
+      </AuthGate>
     </ToastProvider>
   );
 }

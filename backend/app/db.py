@@ -304,6 +304,11 @@ MIGRATIONS = [
     "CREATE INDEX IF NOT EXISTS ix_programs_norm ON programs(norm_key)",
     "CREATE INDEX IF NOT EXISTS ix_programs_model ON programs(model_key)",
     "CREATE TABLE IF NOT EXISTS program_recs (key TEXT PRIMARY KEY, status TEXT, note TEXT, updated_at TEXT)",
+    # Anmeldung (siehe auth.py)
+    """CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, pw_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'admin',
+       active INTEGER DEFAULT 1, created_at TEXT, last_login TEXT)""",
+    """CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, username TEXT NOT NULL, created_at TEXT, expires_at TEXT,
+       ip TEXT, user_agent TEXT)""",
     # Volltextsuche über Name, Pfad, Zusammenfassung, Inhalt, OCR und Labels (rowid = files.id)
     "CREATE VIRTUAL TABLE IF NOT EXISTS files_fts USING fts5(name, path, body, tokenize='unicode61 remove_diacritics 2')",
 ]

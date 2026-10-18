@@ -112,6 +112,14 @@ Vor dem echten Einsatz: **[docs/PROBELAUF.md](docs/PROBELAUF.md)** – ein Ordne
 ./probelauf.sh --ordner ~/Documents --max-dateien 2000              # macOS
 ```
 
+## Zugang & Sicherheit (Anmeldung, HTTPS)
+
+Einstellungen → **Zugang & Sicherheit**:
+- **Anmeldung** (Standard „automatisch“): Ohne Konto ist die App nur auf dem Server-Computer erreichbar – aus dem Netzwerk kommt niemand hinein. Das erste Konto lässt sich nur dort anlegen (`http://localhost:8800`); danach gilt die Anmeldung für alle. Rollen: **Admin** und **nur lesen** (ansehen, aber keine Freigaben, Kopien oder Einstellungen). Konten werden nie gelöscht, nur deaktiviert.
+- Passwörter mit scrypt gespeichert, Sitzung im HttpOnly-Cookie (SameSite=Strict, bei HTTPS „Secure“), Sperre nach 5 Fehlversuchen für 10 Minuten, CSRF-Schutz, Sicherheits-Header (CSP, HSTS …); Anmeldungen und Fehlversuche stehen im Audit-Protokoll.
+- **API-Key für Agenten** per Klick erzeugen (liegt nur für den Benutzer lesbar im Datenordner). Agenten aus dem Netzwerk ohne gültigen Schlüssel werden abgewiesen.
+- **HTTPS** per Klick: eigene kleine Zertifizierungsstelle + Zertifikat für Rechnername und LAN-Adressen; wirkt nach dem Neustart (`start.ps1`/`start.sh`/Dienst starten automatisch verschlüsselt). Der Browser warnt einmalig (eigenes Zertifikat). Agenten prüfen den Server über den **Fingerabdruck** (`--fingerprint`, steht in den Einstellungen und in den Befehlen des Assistenten) – ein falscher Server oder eine umgeleitete Verbindung wird abgelehnt.
+
 ## Einrichtung & Datensicherung
 
 **Einrichtungs-Assistent** (Seite „Einrichtung“, beim ersten Start mit Demo-Daten auf der Übersicht verlinkt): in 4 Schritten statt `config/fdv.yaml` von Hand –

@@ -18,11 +18,15 @@ export function setApiKey(k: string) {
 }
 
 async function request<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
-  const headers: Record<string, string> = {};
+  // X-FDV-Request: Kennung der eigenen Oberfläche (CSRF-Schutz für angemeldete Sitzungen)
+  const headers: Record<string, string> = { "X-FDV-Request": "1" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
   const k = apiKey();
   if (k) headers["X-API-Key"] = k;
   const res = await fetch(path, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+  if (res.status === 401 && !path.startsWith("/api/auth/")) {
+    window.dispatchEvent(new Event("fdv-login-required"));  // Sitzung abgelaufen → Anmeldeseite zeigen
+  }
   if (!res.ok) {
     let msg = res.statusText;
     try {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Bot, CheckCircle2, KeyRound, Loader2, Save, ShieldCheck, XCircle, Zap } from "lucide-react";
-import { apiKey, get, post, setApiKey } from "../api";
+import { Bot, CheckCircle2, Loader2, Save, ShieldCheck, XCircle, Zap } from "lucide-react";
+import { get, post } from "../api";
+import Access from "../components/Access";
 import { useAsync, useToast } from "../components/ui";
 import { fmtBytes, fmtNum, GROUPS } from "../util";
 
@@ -10,7 +11,6 @@ export default function Settings() {
   const skills = useAsync<any[]>(() => get("/api/skills"), []);
   const cats = useAsync<any[]>(() => get("/api/categories"), []);
   const [form, setForm] = useState<any>(null);
-  const [key, setKey] = useState(apiKey());
   const [test, setTest] = useState<any>(null);
   const [testing, setTesting] = useState(false);
   const runTest = async () => {
@@ -150,15 +150,13 @@ export default function Settings() {
           <div className="col" style={{ gap: 5, fontSize: 12.5 }}>
             <div className="row"><Ok v={s.data.ocr_available} /> Tesseract OCR</div>
             <div className="row"><Ok v={s.data.libreoffice_available} /> LibreOffice (Miniaturen für PPTX/DOCX/XLSX)</div>
-            <div className="row"><Ok v={s.data.api_key_enabled} /> API-Key-Schutz {s.data.api_key_enabled ? "aktiv" : "aus (nur im lokalen Netz verwenden)"}</div>
+            <div className="row"><Ok v={s.data.api_key_enabled} /> API-Key für Agenten {s.data.api_key_enabled ? "gesetzt" : "fehlt (siehe Zugang & Sicherheit)"}</div>
           </div>
-          <div className="row">
-            <KeyRound size={15} />
-            <input className="input grow" type="password" placeholder="API-Key für dieses Frontend" value={key} onChange={(e) => setKey(e.target.value)} />
-            <button className="btn sm" onClick={() => { setApiKey(key); toast("API-Key gespeichert"); }}>Übernehmen</button>
-          </div>
+
         </div>
       </div>
+
+      <Access />
 
       <div className="card">
         <div className="card-head"><h2 className="grow">Skills der Agenten</h2></div>

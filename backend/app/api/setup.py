@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -15,11 +15,14 @@ router = APIRouter(prefix="/api", tags=["Einrichtung"])
 
 
 @router.get("/setup")
-def setup_status():
-    """Aktuelle Einrichtung + Vorschläge für diesen Computer."""
-    s = get_settings()
+def setup_status(request: Request):
+    """Aktuelle Einrichtung + Vorschläge für diesen Computer. API-Key und Fingerabdruck nur für Admins."""
+    from .. import auth, tls
+    admin = (getattr(request.state, "user", None) or {}).get("role") == "admin"
+    t = tls.info()
     return {**setup_wizard.current(), "detected": setup_wizard.detect(),
-            "agent_key": s.api_key or None, "tools": _tools()}
+            "agent_key": (auth.api_key() or None) if admin else None, "tools": _tools(),
+            "tls_fingerprint": t["fingerprint"] if t["aktiv"] else None}
 
 
 def _tools() -> dict:

@@ -9,7 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .. import db
+from .. import auth, db
 from ..categories import as_dicts
 from .. import platform_tools
 from ..config import get_settings
@@ -99,7 +99,7 @@ def settings():
         "target_structure": s.target_structure,
         "ocr_available": ocr.available(),
         "libreoffice_available": bool(platform_tools.soffice()),
-        "api_key_enabled": bool(s.api_key),
+        "api_key_enabled": bool(auth.api_key()),
         "config_file": str(s.source),
     }
 
@@ -170,7 +170,8 @@ def _persist_overrides():
                              "thumbs_budget_gb": s.analysis.get("thumbs_budget_gb"),
                              "download_online_only": s.cloud.get("download_online_only"),
                              "cloud_download_content": (s.raw.get("cloud_api") or {}).get("download_content"),
-                             "automation": s.automation, "backup": s.raw.get("backup") or {}},
+                             "automation": s.automation, "backup": s.raw.get("backup") or {},
+                             "server": {k: v for k, v in (s.raw.get("server") or {}).items() if k in ("auth", "tls")}},
                             ensure_ascii=False, indent=2), encoding="utf-8")
 
 
@@ -194,6 +195,8 @@ def load_overrides():
         s.automation.update(d.get("automation") or {})
         if d.get("backup"):
             s.raw.setdefault("backup", {}).update(d["backup"])
+        if d.get("server"):
+            s.raw.setdefault("server", {}).update({k: v for k, v in d["server"].items() if k in ("auth", "tls")})
 
 
 @router.get("/audit")

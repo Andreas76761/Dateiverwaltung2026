@@ -25,6 +25,7 @@ from pathlib import Path
 
 import yaml
 
+from . import auth
 from .config import PROJECT_ROOT, get_settings
 
 SYSTEM_DIRS_WIN = ["Windows", "Program Files", "Program Files (x86)", "ProgramData", "$Recycle.Bin", "Recovery",
@@ -214,7 +215,7 @@ def current() -> dict:
             "computers": [{"id": c["id"], "name": c["name"], "os": c.get("os"), "mode": c["mode"],
                            "volumes": [{"id": v["id"], "name": v["name"], "path": v["path"], "kind": v.get("kind", "internal")}
                                        for v in c["volumes"]]} for c in s.computers],
-            "api_key_set": bool(s.api_key)}
+            "api_key_set": bool(auth.api_key())}
 
 
 def validate(body: dict) -> tuple[dict, list[str]]:

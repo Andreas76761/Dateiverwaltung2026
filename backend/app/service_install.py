@@ -76,6 +76,7 @@ def write_agent_config(a) -> Path:
     p = d / "agent.json"
     data = {"server": a.server, "computer": a.computer, "key": a.key or "", "target": a.target,
             "interval_hours": a.interval, "poll_minutes": a.poll, "download_online_only": a.download_online_only,
+            "fingerprint": getattr(a, "fingerprint", None),
             "log": str(log_dir() / "fdv-agent.log")}
     p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     try:
@@ -243,6 +244,7 @@ def main(argv: list[str] | None = None) -> None:
     ag.add_argument("--interval", type=float, default=24, help="alle N Stunden einlesen (0 = nur auf Anforderung des Servers)")
     ag.add_argument("--poll", type=float, default=10, help="alle N Minuten beim Server melden / Kopieraufgaben abholen")
     ag.add_argument("--download-online-only", action="store_true")
+    ag.add_argument("--fingerprint", help="HTTPS: CA-Fingerabdruck des Servers (Einstellungen → Zugang)")
     ag.add_argument("--nur-anzeigen", action="store_true")
     sv = sub.add_parser("server", help="Zentralen Server (Oberfläche + Zeitplan) einrichten")
     sv.add_argument("--config", help="Pfad zur fdv.yaml")

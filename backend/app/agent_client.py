@@ -46,12 +46,14 @@ def iso(ts: float) -> str:
 
 
 class Agent:
-    def __init__(self, server: str, computer: str, key: str, target: str | None, thumbs: bool, download_online: bool = False):
+    def __init__(self, server: str, computer: str, key: str, target: str | None, thumbs: bool, download_online: bool = False,
+                 fingerprint: str | None = None):
         self.download_online = download_online
         self.service_mode = False
         self.server = server.rstrip("/")
         self.computer = computer
-        self.http = httpx.Client(base_url=self.server, headers={"X-API-Key": key} if key else {}, timeout=120)
+        verify = trusted_ca(self.server, fingerprint) if self.server.startswith("https") else True
+        self.http = httpx.Client(base_url=self.server, headers={"X-API-Key": key} if key else {}, timeout=120, verify=verify)
         self.target = Path(target).resolve() if target else None
         self.thumbs = thumbs
         self.state_file = Path.home() / ".fdv-agent-state.json"
@@ -235,6 +237,31 @@ class Agent:
             time.sleep(max(poll_min, 0.1) * 60)
 
 
+def norm_fp(fp: str) -> str:
+    return fp.replace(":", "").replace(" ", "").upper()
+
+
+def trusted_ca(server: str, fingerprint: str | None):
+    """HTTPS mit eigenem Zertifikat des Servers: CA einmal laden, gegen den Fingerabdruck aus der Oberfläche prüfen
+    und speichern. Danach wird jede Verbindung gegen diese CA geprüft (Schutz gegen Abhören und Umleiten)."""
+    import hashlib
+    import ssl
+    from urllib.parse import urlparse
+
+    store = Path.home() / f".fdv-agent-ca-{urlparse(server).hostname}.pem"
+    if store.exists():
+        return str(store)
+    if not fingerprint:
+        sys.exit("HTTPS-Server mit eigenem Zertifikat: --fingerprint angeben (steht in der Oberfläche unter Einstellungen → Zugang)")
+    pem = httpx.get(f"{server}/api/auth/ca.pem", verify=False, timeout=30).raise_for_status().text  # noqa: S501 – wird unten geprüft
+    der = ssl.PEM_cert_to_DER_cert(pem)
+    if hashlib.sha256(der).hexdigest().upper() != norm_fp(fingerprint):
+        sys.exit("ABBRUCH: Der Fingerabdruck des Server-Zertifikats stimmt nicht – falscher Server oder Verbindung wird umgeleitet.")
+    store.write_text(pem, encoding="utf-8")
+    print(f"Server-Zertifikat geprüft und gespeichert: {store}")
+    return str(store)
+
+
 def load_config_file(path: str) -> dict:
     p = Path(path).expanduser()
     return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
@@ -249,6 +276,7 @@ def main():
     ap.add_argument("--once", action="store_true", help="service: nur einen Durchgang (zum Testen)")
     ap.add_argument("--log", help="Protokolldatei (Standard: ~/.fdv-agent.log im Dienstbetrieb)")
     ap.add_argument("--key", default=os.environ.get("FDV_API_KEY", ""))
+    ap.add_argument("--fingerprint", help="HTTPS: CA-Fingerabdruck des Servers (Einstellungen → Zugang)")
     ap.add_argument("--target", help="Lokaler Cloud-Sync-Ordner für Schritt 4")
     ap.add_argument("--no-thumbs", action="store_true")
     ap.add_argument("--download-online-only", action="store_true",
@@ -266,7 +294,7 @@ def main():
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
                             handlers=[logging.FileHandler(logfile, encoding="utf-8"), logging.StreamHandler()])
     agent = Agent(server, computer, key, target, not (a.no_thumbs or cfg.get("no_thumbs")),
-                  a.download_online_only or bool(cfg.get("download_online_only")))
+                  a.download_online_only or bool(cfg.get("download_online_only")), a.fingerprint or cfg.get("fingerprint"))
     if "service" in a.commands:
         interval = a.interval if a.interval is not None else float(cfg.get("interval_hours", 24))
         agent.service(interval, float(cfg.get("poll_minutes", 10)), once=a.once)

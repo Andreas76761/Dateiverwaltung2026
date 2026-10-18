@@ -5,14 +5,13 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import db, jobs, scheduler
-from .api import agents, automation, cloud, exports, files, pipeline, programs, setup, system
+from .api import agents, auth as auth_api, automation, cloud, exports, files, pipeline, programs, setup, system
 from .config import PROJECT_ROOT, get_settings
-from .middleware import ApiKeyMiddleware, AuditMiddleware, NoDeleteMiddleware
+from .middleware import AuditMiddleware, AuthMiddleware, NoDeleteMiddleware, SecurityHeadersMiddleware
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
@@ -21,6 +20,8 @@ FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
+    from . import auth
+    auth.init()
     system.load_overrides()
     stale = jobs.recover_stale()
     s = get_settings()
@@ -55,11 +56,11 @@ app = FastAPI(title="Future Dateiverwaltung", version="1.0.0", lifespan=lifespan
 
 # Reihenfolge: zuletzt hinzugefügt = zuerst ausgeführt
 app.add_middleware(AuditMiddleware)
-app.add_middleware(ApiKeyMiddleware)
+app.add_middleware(AuthMiddleware)
 app.add_middleware(NoDeleteMiddleware)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST"], allow_headers=["*"])
+app.add_middleware(SecurityHeadersMiddleware)
 
-for r in (files.router, pipeline.router, system.router, agents.router, cloud.router, automation.router, exports.router, programs.router, setup.router):
+for r in (files.router, pipeline.router, system.router, agents.router, cloud.router, automation.router, exports.router, programs.router, setup.router, auth_api.router):
     app.include_router(r)
 
 if FRONTEND_DIST.exists():
