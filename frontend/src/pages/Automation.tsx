@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, CalendarClock, CheckCircle2, FilePlus2, FileWarning, History, Loader2, Play, RefreshCw, ShieldCheck, Undo2, Wifi } from "lucide-react";
 import { get, post, qs } from "../api";
 import FileDetail from "../components/FileDetail";
-import { Empty, FileThumbOrIcon, GroupBadge, ReviewBadge, useAsync, useJobs, useToast } from "../components/ui";
+import { Empty, ExportMenu, FileThumbOrIcon, GroupBadge, ReviewBadge, useAsync, useJobs, useToast } from "../components/ui";
 import type { Computer } from "../types";
 import { fmtBytes, fmtDate, fmtNum, shortPath } from "../util";
 
@@ -198,6 +198,7 @@ export default function Automation() {
         <div className="card" style={{ gridColumn: "span 2" }}>
           <div className="card-head">
             <h2 className="grow">Änderungen</h2>
+            <ExportMenu path="/api/export/aenderungen" />
             <button className={`chip ${!kind ? "on" : ""}`} onClick={() => setKind("")}>Alle</button>
             {Object.entries(KIND).map(([k, v]) => (
               <button key={k} className={`chip ${kind === k ? "on" : ""}`} onClick={() => setKind(kind === k ? "" : k)}>{v.label} {counts[k] ? `(${fmtNum(counts[k])})` : ""}</button>

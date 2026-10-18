@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Bot, Boxes, Cpu, Loader2, Play, Search, Wrench } from "lucide-react";
 import { get, post, qs } from "../api";
-import { Empty, useAsync, useJobs, useToast } from "../components/ui";
+import { Empty, ExportMenu, useAsync, useJobs, useToast } from "../components/ui";
 import { fmtBytes, fmtDate, fmtNum } from "../util";
 
 const KINDS: Record<string, { label: string; icon: any; cls: string }> = {
@@ -36,6 +36,7 @@ export default function Programs() {
           <p>Erweiterung: Organisation aller Programme, KI-Tools und lokalen Modelle je Computer – nur Bestandsaufnahme, keine Änderungen.</p>
         </div>
         <div className="spacer" />
+        <ExportMenu path="/api/export/programme" />
         <button className="btn primary" disabled={isRunning} onClick={start}>{isRunning ? <Loader2 size={14} className="spin" /> : <Play size={14} />} Inventar erfassen</button>
       </div>
 

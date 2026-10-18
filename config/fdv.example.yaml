@@ -42,6 +42,7 @@ analysis:
 target:
   root: ./demo/cloud/OneDrive/Future-Dateiverwaltung
   structure: "{group}/{category}/{year}"   # Platzhalter: group, category, subcategory, year, month, type
+  reports: true                            # Prüfbericht (PDF + Excel) nach jeder Kopie unter _Prüfberichte ablegen
 
 # 4 Computer, 6 Festplatten (4× System, 1× Daten-HDD, 1× USB-Backup) + 2 Cloud-Ordner. Für den Demo-Betrieb zeigen alle Pfade
 # auf ./demo. Auf echten Rechnern z.B. "C:/Users/andreas", "D:/", "/Volumes/Backup".

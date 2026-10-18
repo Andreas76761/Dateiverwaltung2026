@@ -2,7 +2,7 @@ import { CalendarClock, CheckCircle2, CloudUpload, Copy, FileSearch, FolderTree,
 import { useState } from "react";
 import { get, post } from "../api";
 import CostDialog from "../components/CostDialog";
-import { Empty, GroupBadge, Importance, useAsync, useJobs, useToast } from "../components/ui";
+import { Empty, ExportMenu, GroupBadge, Importance, useAsync, useJobs, useToast } from "../components/ui";
 import type { Job } from "../types";
 import { fmtBytes, fmtDate, fmtNum, groupClass } from "../util";
 
@@ -47,6 +47,7 @@ export default function Dashboard({ go }: { go: (page: string) => void }) {
           <p>{s.by_computer.length} Computer · {s.by_volume.length} Datenträger & Cloud-Ordner · LLM: <b>{s.llm_provider}</b></p>
         </div>
         <div className="spacer" />
+        <ExportMenu path="/api/export/statistik" label="Statistik" csv={false} title="Statistik als Excel: Übersicht, je Bereich, Kategorie, Dateityp, Jahr, Computer, Festplatte" />
         <div className={`callout ${auto?.enabled ? "ok" : ""}`} style={{ padding: "8px 12px", cursor: "pointer" }} onClick={() => go("automation")} title="Automatik einstellen">
           <CalendarClock size={18} color={auto?.enabled ? "var(--ok)" : undefined} />
           <span>{auto?.running ? <>Automatik läuft: <b>{auto.running.schritt}</b></> : auto?.enabled

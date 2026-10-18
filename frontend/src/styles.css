@@ -397,3 +397,9 @@ h3 { font-size: 13px; font-weight: 650; text-transform: uppercase; letter-spacin
 .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(480px, 100vw); z-index: 40; box-shadow: -8px 0 32px rgba(15, 23, 42, .18); display: flex; }
 .drawer > .detail { flex: 1; }
 .drawer-bg { position: fixed; inset: 0; z-index: 39; background: rgba(15, 23, 42, .18); }
+
+/* ---------- Export-Menü ---------- */
+.menu-wrap { position: relative; display: inline-block; }
+.menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; min-width: 230px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow); padding: 4px; display: flex; flex-direction: column; }
+.menu a { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px; font-size: 13px; color: var(--text); text-decoration: none; cursor: pointer; white-space: nowrap; }
+.menu a:hover { background: var(--accent-soft); color: var(--accent); }

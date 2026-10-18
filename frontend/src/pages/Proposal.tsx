@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Check, ChevronDown, ChevronRight, Cloud, Folder, FolderInput, Pencil, RefreshCw, RotateCcw, ShieldCheck, X } from "lucide-react";
 import { get, post, qs } from "../api";
 import FileDetail from "../components/FileDetail";
-import { Empty, FileThumbOrIcon, GroupBadge, Importance, Labels, ReviewBadge, SimBadge, useAsync, useJobs, useToast } from "../components/ui";
+import { Empty, FileThumbOrIcon, GroupBadge, Importance, Labels, ExportMenu, ReviewBadge, SimBadge, useAsync, useJobs, useToast } from "../components/ui";
 import type { TreeNode } from "../types";
 import { fmtBytes, fmtNum, shortPath } from "../util";
 
@@ -120,6 +120,7 @@ export default function Proposal() {
             </div>
             <div className="faint" style={{ fontSize: 12 }}>{fmtNum(items.length)} Dateien · {fmtBytes(items.reduce((a, f) => a + f.size, 0))} · Nur Vorschlag – physisch wird nichts verändert</div>
           </div>
+          <ExportMenu path="/api/export/vorschlag" params={{ include_duplicates: inclDup }} title="Gesamten Vorschlag (alle Ordner, Prüfstatus, Quelle → Ziel) als Excel/CSV" />
           <button className="btn ok" onClick={() => act("freigeben", { folder })}><Check size={14} /> Ordner freigeben</button>
           <button className="btn bad" onClick={() => act("ablehnen", { folder })}><X size={14} /> Ordner ablehnen</button>
           <button className="btn ghost" onClick={() => act("zurücksetzen", { folder })}><RotateCcw size={14} /></button>

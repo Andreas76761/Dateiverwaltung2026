@@ -238,7 +238,9 @@ def test_cloud_scan_analyze_and_server_side_copy(cloud_env):
     j = wait(c, c.post("/api/pipeline/copy", json={}).json()["job_id"])
     # 2× OneDrive + 2× Google Drive; der lokale Steuerbescheid ist Duplikat der OneDrive-Datei → nicht doppelt kopiert
     assert j["stats"]["cloud_serverseitig"] == 4 and j["stats"]["kopiert"] == 4, j["stats"]
-    assert not list((Path(c.get("/api/settings").json()["target_root"])).rglob("*.pdf"))
+    root = Path(c.get("/api/settings").json()["target_root"])
+    # nichts lokal kopiert – nur der Prüfbericht zum Kopiervorgang liegt im Zielordner
+    assert not [p for p in root.rglob("*.pdf") if "_Prüfberichte" not in p.parts]
     od_copies = [x for x in fake.copies if x["provider"] == "onedrive"]
     assert all(x["folder"].startswith("Future-Dateiverwaltung/02_Beruf") or x["folder"].startswith("Future-Dateiverwaltung/01_Privat")
                for x in od_copies)

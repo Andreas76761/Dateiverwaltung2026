@@ -63,6 +63,20 @@ Je Gruppe wird eine Empfehlung markiert (★ höchste Versionsangabe bzw. neuest
 
 macOS (launchd) und Linux (systemd-Benutzerdienst): `./dienst-einrichten.sh …` mit denselben Befehlen; `--nur-anzeigen` zeigt vorher, was eingerichtet würde. Unter Windows wird bewusst die Aufgabenplanung „bei Anmeldung“ statt eines SYSTEM-Dienstes genutzt: So läuft der Agent als angemeldeter Benutzer und sieht dessen OneDrive/Google-Drive-Ordner. Der API-Key steht nicht in der Aufgabe, sondern in einer nur für den Benutzer lesbaren `agent.json`. Der Agent liest alle 24 Stunden (`--interval`) und auf Anforderung des Servers neu ein, meldet sich alle 10 Minuten und führt dabei nur freigegebene Kopien aus. Protokoll: `fdv-agent.log` (Pfad zeigt der Installer an).
 
+## Export & Prüfbericht
+
+Fast jede Ansicht hat einen Knopf **Export** (Excel `.xlsx` oder CSV mit Semikolon und UTF-8 – öffnet sich in deutschem Excel direkt richtig):
+
+| Wo | Inhalt |
+|---|---|
+| Explorer | die aktuelle Liste mit allen gesetzten Filtern und der Sortierung – ohne Seitenbegrenzung (bei „Duplikate“ die Duplikat-Gruppen) |
+| Vorschlag & Prüfung | gesamter Vorschlag: Prüfstatus, Bereich, Kategorie, neuer Ordner/Name, Quelle; dazu Blätter „Ordnerstruktur“ und „Je Bereich“ |
+| Kopieren & Statistik | **Prüfbericht (PDF)** und vollständiges Kopierprotokoll (Excel/CSV) je Lauf |
+| Übersicht | Statistik als Excel: Übersicht, je Bereich, Kategorie, Dateityp, Jahr, Computer, Festplatte, Wichtigkeit |
+| Ähnliche Dateien · Automatik · Programme | Gruppen ähnlicher Dateien · Änderungsprotokoll · Programm- & LLM-Inventar |
+
+Der **Prüfbericht** enthält die Zusagen (Originale unverändert, nichts überschrieben, nur Freigegebenes kopiert), die SHA-256-Bestätigung („58 von 58 Kopien bestätigt“), Statistik, Fehler, Einzelnachweis Quelle → Ziel und eine Prüfsumme über das Protokoll. Nach jedem echten Kopiervorgang werden Prüfbericht (PDF) und Protokoll (Excel) **automatisch mit in den Zielordner** gelegt (`_Prüfberichte/Kopie_Lauf_<Nr>_<Datum>.pdf`, nie überschrieben; abschaltbar mit `target.reports: false`). Exporte lesen nur aus der Datenbank; Dateinamen wie `=HYPERLINK(…)` werden als Text geschrieben, damit Excel keine Formeln ausführt.
+
 ## Probelauf auf einem echten Computer
 
 Vor dem echten Einsatz: **[docs/PROBELAUF.md](docs/PROBELAUF.md)** – ein Ordner, Dateilimit, Trockenlauf, Vorher/Nachher-Nachweis, dass nichts verändert wurde, und ein Bericht zum Zurückmelden:

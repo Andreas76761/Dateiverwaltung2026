@@ -2,7 +2,7 @@
 
 Diese Datei ist die EINZIGE Stelle der Anwendung, die schreibend auf das
 Dateisystem außerhalb des Datenverzeichnisses zugreift – und zwar nur zum
-Anlegen von Ordnern und Kopieren von Dateien innerhalb von `target.root`.
+Anlegen von Ordnern, Kopieren von Dateien und Ablegen von Prüfberichten innerhalb von `target.root`.
 Eine Lösch-, Verschiebe- oder Umbenennungsfunktion existiert bewusst nicht.
 """
 from __future__ import annotations
@@ -103,3 +103,19 @@ def safe_copy(src: str, rel_dst: str, expected_hash: str | None = None, root: Pa
         raise SafetyError("Prüfsumme nach Kopie stimmt nicht überein")
     os.replace(long_path(tmp), long_path(dst))
     return {"status": "kopiert", "dst": str(dst), "bytes": src_p.stat().st_size, "verified": True, "message": ""}
+
+
+def safe_write(rel_dst: str, data: bytes, root: Path | None = None) -> Path:
+    """Neue Datei (z. B. Prüfbericht) in root/rel_dst anlegen. Überschreibt NIE – bei Namenskonflikt „Name (2)“."""
+    root = root or target_root()
+    dst = assert_in_target(root / sanitize_rel(rel_dst), root)
+    stem, suf, i = dst.stem, dst.suffix, 2
+    while dst.exists():
+        dst = dst.with_name(f"{stem} ({i}){suf}")
+        i += 1
+    os.makedirs(long_path(dst.parent), exist_ok=True)
+    tmp = dst.with_name(dst.name + ".fdv-partial")
+    with open(long_path(tmp), "xb") as fh:  # "x": schlägt fehl, falls die Datei schon existiert
+        fh.write(data)
+    os.replace(long_path(tmp), long_path(dst))
+    return dst

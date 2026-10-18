@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, X } from "lucide-react";
-import { get, thumbUrl } from "../api";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FileText, X } from "lucide-react";
+import { exportUrl, get, thumbUrl } from "../api";
 import type { Job } from "../types";
 import { groupClass, impClass } from "../util";
 
@@ -90,6 +90,33 @@ export function SimBadge({ kind, count, best, small }: { kind: string | null; co
       title={`${SIM_TEXT[kind]?.hint ?? kind} · ${count} Dateien · ${role}`}>
       ≈ {count} {small ? "" : SIM_TEXT[kind]?.label ?? kind}
     </span>
+  );
+}
+
+/** Export-Knopf mit Auswahl Excel / CSV (lädt direkt herunter). */
+export function ExportMenu({ path, params = {}, label = "Export", csv = true, title }: {
+  path: string; params?: Record<string, string | number | boolean | undefined | null>; label?: string; csv?: boolean; title?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+  return (
+    <div className="menu-wrap" ref={ref}>
+      <button className="btn" onClick={() => setOpen(!open)} title={title ?? "Als Excel oder CSV herunterladen"}>
+        <Download size={14} /> {label} <ChevronDown size={13} />
+      </button>
+      {open && (
+        <div className="menu">
+          <a href={exportUrl(`${path}.xlsx`, params)} onClick={() => setOpen(false)}><FileSpreadsheet size={14} /> Excel (.xlsx)</a>
+          {csv && <a href={exportUrl(`${path}.csv`, params)} onClick={() => setOpen(false)}><FileText size={14} /> CSV (Semikolon, für Excel)</a>}
+        </div>
+      )}
+    </div>
   );
 }
 

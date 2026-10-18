@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { CheckCircle2, CloudUpload, FlaskConical, Loader2, ShieldCheck, XCircle } from "lucide-react";
-import { get, post, qs } from "../api";
-import { Empty, GroupBadge, useAsync, useJobs, useToast } from "../components/ui";
+import { CheckCircle2, CloudUpload, FileCheck2, FlaskConical, FolderUp, Loader2, ShieldCheck, XCircle } from "lucide-react";
+import { exportUrl, get, post, qs } from "../api";
+import { Empty, ExportMenu, GroupBadge, useAsync, useJobs, useToast } from "../components/ui";
 import type { CopyOp } from "../types";
 import { fmtBytes, fmtDate, fmtNum, groupClass, relTo, shortPath } from "../util";
 
@@ -32,6 +32,15 @@ export default function CopyPage({ go }: { go: (p: string) => void }) {
     }
   };
 
+  const saveReport = async () => {
+    if (!shownJob) return;
+    try {
+      const r = await post<{ dateien: string[] }>(`/api/export/kopie/${shownJob.id}/pruefbericht-ablegen`);
+      toast(`Prüfbericht abgelegt: ${relTo(r.dateien[0], p?.target_root ?? "")}`);
+    } catch (e: any) {
+      toast(e.message, true);
+    }
+  };
   const st = shownJob?.stats ?? {};
   const groups = Object.entries((st.je_gruppe ?? {}) as Record<string, number>);
   return (
@@ -117,6 +126,12 @@ export default function CopyPage({ go }: { go: (p: string) => void }) {
                 </div>
               )}
               <div className="callout ok"><ShieldCheck size={18} color="var(--ok)" /><span>Jede Kopie wird per SHA-256 verifiziert. Vorhandene Dateien im Ziel werden nie überschrieben – bei Namenskonflikten wird „Name (2)“ angelegt.</span></div>
+              <div className="row wrap" style={{ gap: 8 }}>
+                <a className="btn" href={exportUrl(`/api/export/kopie/${shownJob.id}/pruefbericht.pdf`)} target="_blank" rel="noreferrer"><FileCheck2 size={14} /> Prüfbericht (PDF)</a>
+                <ExportMenu path={`/api/export/kopie/${shownJob.id}`} label="Protokoll" title="Vollständiges Kopierprotokoll als Excel/CSV" />
+                {!st.trockenlauf && <button className="btn" onClick={saveReport} title="Prüfbericht (PDF + Excel) erneut im Zielordner unter „_Prüfberichte“ ablegen"><FolderUp size={14} /> Im Zielordner ablegen</button>}
+                {Array.isArray(st["prüfbericht"]) && <span className="faint" style={{ fontSize: 12 }}>Automatisch abgelegt: <span className="mono">{relTo(st["prüfbericht"][0], p?.target_root ?? "")}</span></span>}
+              </div>
             </>
           ) : (
             <div className="faint">Noch kein Kopiervorgang durchgeführt.</div>

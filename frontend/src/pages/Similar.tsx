@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { FileStack, Files, Images, Layers, Loader2, RefreshCw, Search, ShieldCheck, Star } from "lucide-react";
 import { get, post, qs, thumbUrl } from "../api";
 import FileDetail from "../components/FileDetail";
-import { Empty, FileIcon, GroupBadge, SIM_TEXT, useAsync, useJobs, useToast } from "../components/ui";
+import { Empty, ExportMenu, FileIcon, GroupBadge, SIM_TEXT, useAsync, useJobs, useToast } from "../components/ui";
 import type { SimGroup, SimilarFile, SimKind } from "../types";
 import { fmtBytes, fmtDate, fmtNum, shortPath } from "../util";
 
@@ -88,6 +88,7 @@ export default function Similar({ params }: { params: URLSearchParams }) {
           <h1>Ähnliche Dateien</h1>
           <p>Nicht identisch, aber zusammengehörig: Versionen (Angebot_v2 / Angebot_final), dasselbe Dokument als PDF und DOCX, bearbeitete oder verkleinerte Fotos.</p>
         </div>
+        <ExportMenu path="/api/export/aehnliche" />
         <button className="btn" disabled={busy} onClick={rerun}>{busy ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />} Neu suchen</button>
       </div>
 

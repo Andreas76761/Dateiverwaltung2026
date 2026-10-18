@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import json
 from collections import Counter
 
 from .. import db
@@ -118,4 +119,13 @@ def run(job: Job, params: dict) -> dict:
 
     stats["je_gruppe"] = dict(per_group)
     stats["je_gruppe_bytes"] = dict(per_group_bytes)
+    if not dry and not job.cancelled and s.raw.get("target", {}).get("reports", True) and (stats["kopiert"] or stats["fehler"]):
+        # Prüfbericht als PDF + Excel mit in den Zielordner legen (unter „_Prüfberichte“, nie überschreiben)
+        from .. import exports
+        job.update(**stats)
+        try:
+            stats["prüfbericht"] = exports.save_report_to_target(
+                {**db.one("SELECT * FROM jobs WHERE id=?", (job.id,)), "stats": json.dumps(stats, ensure_ascii=False)})
+        except Exception as exc:  # Bericht darf den Kopiervorgang nicht scheitern lassen
+            stats["prüfbericht_fehler"] = str(exc)
     return stats

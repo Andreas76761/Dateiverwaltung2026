@@ -57,3 +57,9 @@ export function rawUrl(fileId: number) {
   const k = apiKey();
   return `/api/files/${fileId}/raw${k ? `?key=${encodeURIComponent(k)}` : ""}`;
 }
+
+/** Download-Link für Exporte (Excel/CSV/PDF) – mit API-Key, falls gesetzt. */
+export function exportUrl(path: string, params: Record<string, string | number | boolean | undefined | null> = {}) {
+  const k = apiKey();
+  return `${path}${qs({ ...params, key: k || undefined })}`;
+}

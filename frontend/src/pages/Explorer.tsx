@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Cloud, Copy, Folder, FolderOpen, GalleryHorizontal, HardDrive, Images, Layers, LayoutGrid, Laptop, List, PanelLeftClose, PanelLeftOpen, Pin, Search, Usb, X } from "lucide-react";
 import { get, post, qs, thumbUrl } from "../api";
 import FileDetail from "../components/FileDetail";
-import { FileIcon, FileThumbOrIcon, GroupBadge, Importance, Labels, OnlineBadge, PageViewer, ReviewBadge, SimBadge, useAsync, useJobs } from "../components/ui";
+import { FileIcon, FileThumbOrIcon, GroupBadge, Importance, Labels, ExportMenu, OnlineBadge, PageViewer, ReviewBadge, SimBadge, useAsync, useJobs } from "../components/ui";
 import type { Computer, FileItem, FileList } from "../types";
 
 // Dateitypen mit Seitenvorschau (Office über LibreOffice → PDF → alle Seiten)
@@ -270,6 +270,13 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
             <option value="computer">Nach Computer</option>
           </select>
           <button className="btn icon" onClick={() => setOrder(order === "asc" ? "desc" : "asc")} title="Reihenfolge">{order === "asc" ? <ArrowUp size={15} /> : <ArrowDown size={15} />}</button>
+          <ExportMenu path={dup === "ja" ? "/api/export/duplikate" : "/api/export/dateien"} label="Export"
+            title={dup === "ja" ? "Duplikat-Gruppen als Excel/CSV" : "Aktuelle Liste (alle Treffer mit den gesetzten Filtern) als Excel/CSV"}
+            params={dup === "ja" ? {} : {
+              q: qDebounced, computer: sel.computer, volume: sel.volume, folder: sel.folder, group: group === "(nicht analysiert)" ? undefined : group,
+              category, file_type: fileType, label, dup, review, date_from: dateFrom, date_to: dateTo, sort, order,
+              status: group === "(nicht analysiert)" ? "eingelesen" : undefined, ext: previewOnly ? PREVIEW_EXTS : undefined, online, similar,
+            }} />
           <div className="seg">
             <button className={view === "list" ? "on" : ""} onClick={() => setView("list")}><List size={14} /> Liste</button>
             <button className={view === "grid" ? "on" : ""} onClick={() => setView("grid")}><LayoutGrid size={14} /> Galerie</button>
