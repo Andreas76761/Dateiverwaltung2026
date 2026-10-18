@@ -81,7 +81,7 @@ LIST_COLS = """f.id, f.computer_id, f.volume_id, f.path, f.rel_path, f.name, f.e
   f.sim_group, f.sim_count, f.sim_kind, f.sim_best,
   (SELECT group_concat(label, '|') FROM labels l WHERE l.file_id=f.id) labels,
   (SELECT COUNT(*) FROM thumbnails t WHERE t.file_id=f.id) thumbs,
-  (SELECT group_concat(COALESCE(t.label, ''), '|') FROM thumbnails t WHERE t.file_id=f.id AND f.file_type IN ('Video', 'E-Mail')) thumb_labels,
+  (SELECT group_concat(COALESCE(t.label, ''), '|') FROM thumbnails t WHERE t.file_id=f.id AND f.file_type IN ('Video', 'E-Mail', 'Audio', 'Archiv', 'Bild')) thumb_labels,
   c.name computer_name, v.name volume_name, v.kind volume_kind"""
 
 

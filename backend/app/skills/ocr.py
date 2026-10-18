@@ -30,13 +30,16 @@ def languages() -> str:
     return "+".join(use)
 
 
-def ocr_image(path: str) -> str:
-    pytesseract = _pytesseract()
-    from PIL import Image
+def ocr_image(path: str, max_pages: int = 10) -> str:
+    """Bilder inkl. HEIC; mehrseitige TIFF-Dateien (Faxe, Scans) Seite für Seite."""
+    from . import formats
 
-    with Image.open(path) as im:
+    pytesseract = _pytesseract()
+    out = []
+    for im in formats.image_frames(path, max_pages):
         im.thumbnail((3000, 3000))
-        return pytesseract.image_to_string(im.convert("RGB"), lang=languages())
+        out.append(pytesseract.image_to_string(im.convert("RGB"), lang=languages()))
+    return "\n".join(out)
 
 
 def ocr_pdf(path: str, max_pages: int = 5) -> str:
@@ -63,7 +66,7 @@ def run(path: str, ext: str, existing_text: str) -> str:
     if not get_settings().analysis.get("ocr") or not available():
         return ""
     try:
-        if ext in {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp"}:
+        if ext in {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp", ".heic", ".heif", ".hif", ".avif"}:
             return " ".join(ocr_image(path).split())[:20000]
         if ext == ".pdf" and len(existing_text.strip()) < 40:
             return " ".join(ocr_pdf(path).split())[:20000]

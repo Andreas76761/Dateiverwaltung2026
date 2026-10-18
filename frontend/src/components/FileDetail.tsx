@@ -77,6 +77,7 @@ export default function FileDetail({ id, onClose, onChanged, onOpen }: { id: num
   };
   const target = f.final_path || f.suggested_path;
   const isVideo = f.file_type === "Video";
+  const isAudio = f.file_type === "Audio";
 
   return (
     <div className="detail">
@@ -174,7 +175,7 @@ export default function FileDetail({ id, onClose, onChanged, onOpen }: { id: num
 
         <div>
           <div className="tabs">
-            <button className={tab === "seiten" ? "on" : ""} onClick={() => setTab("seiten")}>{isVideo ? "Standbilder" : "Seiten"} ({f.thumbnails.length})</button>
+            <button className={tab === "seiten" ? "on" : ""} onClick={() => setTab("seiten")}>{isVideo ? "Standbilder" : isAudio ? "Cover & Wellenform" : f.file_type === "Archiv" ? "Inhalt" : "Seiten"} ({f.thumbnails.length})</button>
             <button className={tab === "inhalt" ? "on" : ""} onClick={() => setTab("inhalt")}>Inhalt</button>
             <button className={tab === "ocr" ? "on" : ""} onClick={() => setTab("ocr")}><ScanText size={13} style={{ verticalAlign: -2 }} /> OCR</button>
             <button className={tab === "duplikate" ? "on" : ""} onClick={() => setTab("duplikate")}>Duplikate ({f.duplicates.length})</button>
@@ -201,8 +202,13 @@ export default function FileDetail({ id, onClose, onChanged, onOpen }: { id: num
                   poster={f.thumbnails.length ? thumbUrl(f.id, 1) : undefined} />
               )
             )}
+            {tab === "seiten" && isAudio && f.missing === 0 && !f.online_only && f.computer_id !== "cloud-api" && (
+              videoErr ? (
+                <div className="callout warn" style={{ fontSize: 12.5, marginBottom: 10 }}>Dieses Audioformat kann der Browser nicht direkt abspielen – „Original ansehen“ nutzen.</div>
+              ) : <audio src={rawUrl(f.id)} controls preload="metadata" style={{ width: "100%", marginBottom: 10 }} onError={() => setVideoErr(true)} />
+            )}
             {tab === "seiten" && (f.thumbnails.length ? (
-              <div className={`pages-grid ${isVideo ? "frames" : ""}`}>
+              <div className={`pages-grid ${isVideo || isAudio ? "frames" : ""}`}>
                 {f.thumbnails.map((t) => (
                   <div key={t.page} className="page-thumb" onClick={() => setViewer(t.page)} title={t.label ?? `Seite ${t.page}`}>
                     <img src={thumbUrl(f.id, t.page)} loading="lazy" alt={t.label ?? `Seite ${t.page}`} />

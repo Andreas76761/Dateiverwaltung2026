@@ -36,6 +36,9 @@ def keyword_hits(hay: str) -> dict[str, int]:
     return hits
 
 
+META_LINE = re.compile(r"^\[(?:raw-foto|iphone-/heic-foto|foto) · [^\]]*\]\s*")
+
+
 class RulesProvider:
     name = "regeln"
 
@@ -48,18 +51,20 @@ class RulesProvider:
 
         name_hits = keyword_hits(hay_name)
         text_hits = keyword_hits(hay_text) if hay_text else {}
+        # Foto-Metadaten (Aufnahmedatum, Kamera) sind kein Dokumenttext – zählen nicht als „Bild mit viel Text“
+        content_len = len(META_LINE.sub("", hay_text, count=1))
         scores: dict[str, float] = {}
         for c in CATEGORIES:
             s = 0.0
             if ext and ext in c.exts:
                 # Bild mit OCR-Text (z. B. gescannter Beleg) oder Video mit Titel → Inhalt zählt mehr als die Endung
-                s += 1.0 if (meta.get("file_type") in ("Bild", "Video") and len(hay_text) > 80) else 3.0
+                s += 1.0 if (meta.get("file_type") in ("Bild", "Video") and content_len > 80) else 3.0
             for kw in c.keywords:
                 if kw in name_hits:
                     s += 2.5
                 if kw in text_hits:
                     s += min(text_hits[kw], 5) * 0.6
-            if c.id == "p_fotos" and meta.get("file_type") == "Bild" and len(hay_text) > 80:
+            if c.id == "p_fotos" and meta.get("file_type") == "Bild" and content_len > 80:
                 s *= 0.4  # Bild mit viel Text ist eher ein gescanntes Dokument
             if s:
                 scores[c.id] = s

@@ -8,6 +8,11 @@ from pathlib import Path
 from .filetype import TEXT_EXTS
 from .video import VIDEO_EXTS as VIDEO_EXTS_
 
+IMAGE_LIKE = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".heic", ".heif", ".hif", ".avif", ".cr2", ".cr3", ".crw", ".nef",
+              ".nrw", ".arw", ".srf", ".sr2", ".dng", ".raf", ".orf", ".rw2", ".pef", ".srw", ".3fr", ".erf", ".kdc", ".mrw",
+              ".x3f", ".raw", ".rwl", ".iiq"}
+AUDIO_EXTS_ = {".mp3", ".m4a", ".aac", ".flac", ".wav", ".ogg", ".oga", ".opus", ".wma", ".aiff", ".aif", ".alac", ".amr"}
+
 MAX_CHARS = 20000
 
 
@@ -81,6 +86,40 @@ def _odf(path: str) -> tuple[str, int]:
     return re.sub(r"<[^>]+>", " ", xml), None
 
 
+def _iwork(path: str) -> tuple[str, int | None]:
+    """Keynote/Pages/Numbers: Text aus der LibreOffice-PDF (gecacht, wird auch für die Miniaturen genutzt)."""
+    from . import formats, thumbnails
+
+    if not formats.is_iwork(path):
+        return "", None  # z. B. Schlüsseldatei „server.key“ – nicht auslesen
+    pdf = thumbnails._office_to_pdf(path)
+    if pdf:
+        return _pdf(str(pdf))
+    text = formats.iwork_text(path)
+    if not text and (prev := formats.iwork_preview(path)):
+        # Neuere iWork-Dateien ohne LibreOffice: gespeicherte Vorschau (erste Seite) lesen – als PDF oder per OCR
+        import tempfile
+
+        from . import ocr
+        data, ext = prev
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / f"preview{ext}"
+            f.write_bytes(data)
+            if ext == ".pdf":
+                return _pdf(str(f))
+            if ocr.available():
+                try:
+                    text = "[Vorschau, per OCR gelesen] " + ocr.ocr_image(str(f))
+                except Exception:
+                    text = ""
+    return text, None
+
+
+def _is_archive(path: str) -> bool:
+    from . import formats
+    return formats.is_archive(path)
+
+
 def extract_text(path: str, ext: str) -> tuple[str, int | None]:
     """-> (text, page_count). Fehler werden nach oben gereicht."""
     if ext == ".pdf":
@@ -102,6 +141,18 @@ def extract_text(path: str, ext: str) -> tuple[str, int | None]:
     elif ext in VIDEO_EXTS_:
         from . import video
         t, n = video.describe(video.probe(path)), None
+    elif ext in IMAGE_LIKE:
+        from . import formats
+        t = formats.describe_photo(formats.photo_meta(path), ext)
+        n = formats.page_count(path) if ext in formats.TIFF_EXTS else None
+    elif ext in (".key", ".pages", ".numbers"):
+        t, n = _iwork(path)
+    elif ext in AUDIO_EXTS_:
+        from . import formats
+        t, n = formats.describe_audio(formats.audio_meta(path)), None
+    elif _is_archive(path):
+        from . import formats
+        t, n = formats.archive_text(path), None
     elif ext in TEXT_EXTS:
         with open(path, "rb") as fh:
             raw = fh.read(MAX_CHARS * 2)

@@ -1,5 +1,6 @@
-"""Skill: Miniaturansichten ALLER Seiten von PDF, PPTX, DOCX, XLSX (über LibreOffice), Bildern,
-Videos (Standbilder über die Laufzeit) und E-Mails (Mail-Seiten + Seiten der Anhänge)."""
+"""Skill: Miniaturansichten ALLER Seiten von PDF, PPTX, DOCX, XLSX, Keynote/Pages/Numbers (über LibreOffice),
+Bildern (auch HEIC, RAW, mehrseitige TIFF), Videos (Standbilder über die Laufzeit), E-Mails (Mail-Seiten + Seiten der
+Anhänge), Archiven (Inhaltsverzeichnis + enthaltene Bilder/Dokumente) und Audio (Cover + Wellenform)."""
 from __future__ import annotations
 
 import hashlib
@@ -10,7 +11,7 @@ from pathlib import Path
 
 from .. import platform_tools
 from ..config import get_settings
-from . import mail, video
+from . import formats, mail, video
 from .filetype import IMAGE_EXTS, OFFICE_PAGED
 
 THUMB_WIDTH = 900  # scharf genug für die Großansicht, klein genug für Listen
@@ -86,17 +87,133 @@ def _render_pdf(pdf: str, out_dir: Path, max_pages: int, sheet: bool = False, st
     return res
 
 
-def _render_image(path, out_dir: Path, start: int = 0, label: str | None = None) -> list[dict]:
-    """path darf ein Dateipfad oder ein Dateiobjekt (z. B. Mail-Anhang im Speicher) sein."""
+def _render_image(path, out_dir: Path, start: int = 0, label: str | None = None, max_pages: int = 200) -> list[dict]:
+    """path darf ein Dateipfad oder ein Dateiobjekt (z. B. Mail-Anhang im Speicher) sein.
+    Mehrseitige TIFF-Dateien liefern eine Miniatur je Seite; HEIC und RAW werden über formats geöffnet."""
     from PIL import Image, ImageOps
 
-    with Image.open(path) as im:
+    if isinstance(path, (str, Path)):
+        frames = list(formats.image_frames(str(path), max_pages))
+    else:
+        with Image.open(path) as im:
+            frames = [im.copy()]
+    res = []
+    for i, im in enumerate(frames):
         im = ImageOps.exif_transpose(im).convert("RGB")
         im.thumbnail((THUMB_WIDTH, THUMB_WIDTH * 2))
-        p = out_dir / f"p{start + 1:04d}.jpg"
+        p = out_dir / f"p{start + i + 1:04d}.jpg"
         im.save(p, "JPEG", quality=75)
-        r = {"page": start + 1, "path": str(p), "width": im.width, "height": im.height}
-        return [{**r, "label": label} if label else r]
+        r = {"page": start + i + 1, "path": str(p), "width": im.width, "height": im.height}
+        if label:
+            r["label"] = f"{label} · S. {i + 1}" if len(frames) > 1 else label
+        elif len(frames) > 1:
+            r["label"] = f"Seite {i + 1}"
+        res.append(r)
+    return res
+
+
+def _html_page(html: str, out_dir: Path, start: int, label: str) -> list[dict]:
+    """Kleine Info-Seite (z. B. Archiv-Inhaltsverzeichnis) als Miniatur."""
+    import pymupdf
+
+    with tempfile.TemporaryDirectory() as tmp:
+        f = Path(tmp) / "info.pdf"
+        story = pymupdf.Story(html=html, user_css="* { font-family: sans-serif; } body { font-size: 10pt; color: #0f172a; } "
+                                                     "h1 { font-size: 15pt; color: #312e81; } td { padding: 1pt 6pt 1pt 0; font-size: 9pt; } "
+                                                     ".m { color: #64748b; }")
+        writer = pymupdf.DocumentWriter(str(f))
+        rect = pymupdf.paper_rect("a4")
+        dev = writer.begin_page(rect)
+        story.place(rect + (36, 36, -36, -36))  # nur die erste Seite – reicht als Übersicht
+        story.draw(dev)
+        writer.end_page()
+        writer.close()
+        return _render_pdf(str(f), out_dir, 1, start=start, label=label)
+
+
+def _render_archive(path: str, out_dir: Path, max_pages: int) -> tuple[list[dict], int]:
+    """Seite 1: Inhaltsverzeichnis; danach Vorschau der ersten enthaltenen Bilder, PDFs und Office-Dateien."""
+    import io
+    from html import escape
+
+    entries = formats.archive_entries(path)
+    files = [e for e in entries if not e["dir"]]
+    rows = "".join(f"<tr><td>{escape(e['name'])}</td><td class='m'>{formats._fmt(e['size'] or 0)}</td></tr>" for e in files[:60])
+    more = f"<p class='m'>… und {len(files) - 60} weitere</p>" if len(files) > 60 else ""
+    head = escape(formats.describe_archive(entries).split("\n")[0])
+    res = _html_page(f"<h1>{escape(Path(path).name)}</h1><p class='m'>{head}</p><table>{rows}</table>{more}", out_dir, 0, "Inhalt")
+    previewable = [e for e in files if not e["encrypted"] and e["size"] <= formats.MAX_MEMBER
+                   and Path(e["name"]).suffix.lower() in IMAGE_EXTS | formats.HEIC_EXTS | {".pdf"} | OFFICE_PAGED]
+    budget = formats.MAX_UNPACK_TOTAL
+    truncated = False
+    with tempfile.TemporaryDirectory() as tmp:
+        for i, e in enumerate(previewable[:formats.MAX_MEMBERS_PREVIEW]):
+            if len(res) >= max_pages or budget <= 0:
+                truncated = len(res) >= max_pages
+                break
+            data = formats._read_member(path, e["name"], e["size"])
+            if not data:
+                continue
+            budget -= len(data)
+            ext = Path(e["name"]).suffix.lower()
+            lbl = Path(e["name"]).name
+            try:
+                if ext in IMAGE_EXTS:
+                    res += _render_image(io.BytesIO(data), out_dir, start=len(res), label=lbl)
+                    continue
+                f = Path(tmp) / f"m{i}{ext}"  # eigener Dateiname – Pfade aus dem Archiv werden nie verwendet
+                f.write_bytes(data)
+                if ext in formats.HEIC_EXTS:
+                    res += _render_image(str(f), out_dir, start=len(res), label=lbl, max_pages=1)
+                elif ext == ".pdf":
+                    res += _render_pdf(str(f), out_dir, min(3, max_pages - len(res)), start=len(res), label=lbl)
+                elif (pdf := _office_to_pdf(str(f))):
+                    res += _render_pdf(str(pdf), out_dir, min(3, max_pages - len(res)), sheet=ext in SHEET_EXTS, start=len(res), label=lbl)
+            except Exception:
+                continue  # defekter Eintrag darf die Archiv-Vorschau nicht verhindern
+    # nur Deckblatt angefordert → Gesamtzahl schätzen, damit „Alle Seiten laden“ angeboten wird
+    return res, (max(len(res) + 1, 1 + min(len(previewable), formats.MAX_MEMBERS_PREVIEW)) if truncated else len(res))
+
+
+def _render_iwork(path: str, out_dir: Path, max_pages: int) -> tuple[list[dict], int]:
+    """Keynote/Pages/Numbers: über LibreOffice alle Seiten, sonst die gespeicherte Vorschau des Dokuments."""
+    import io
+
+    if not formats.is_iwork(path):
+        return [], 0
+    pdf = _office_to_pdf(path)
+    if pdf:
+        return _render_pdf(str(pdf), out_dir, max_pages, sheet=path.lower().endswith(".numbers")), _pdf_pages(str(pdf))
+    prev = formats.iwork_preview(path)
+    if not prev:
+        return [], 0
+    data, ext = prev
+    if ext == ".pdf":
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / "preview.pdf"
+            f.write_bytes(data)
+            return _render_pdf(str(f), out_dir, max_pages), _pdf_pages(str(f))
+    return _render_image(io.BytesIO(data), out_dir, label="Vorschau"), 1
+
+
+def _render_audio(path: str, out_dir: Path) -> list[dict]:
+    """Cover (falls eingebettet) und Wellenform."""
+    import io
+
+    res: list[dict] = []
+    cover = formats.audio_cover(path)
+    if cover:
+        try:
+            res += _render_image(io.BytesIO(cover), out_dir, label="Cover")
+        except Exception:
+            pass
+    p = out_dir / f"p{len(res) + 1:04d}.jpg"
+    if formats.audio_waveform(path, p):
+        from PIL import Image
+
+        with Image.open(p) as im:
+            res.append({"page": len(res) + 1, "path": str(p), "width": im.width, "height": im.height, "label": "Wellenform"})
+    return res
 
 
 def _render_mail(path: str, out_dir: Path, max_pages: int) -> list[dict]:
@@ -119,7 +236,7 @@ def _render_mail(path: str, out_dir: Path, max_pages: int) -> list[dict]:
                     f = Path(tmp) / f"a{i}.pdf"
                     f.write_bytes(a["data"])
                     res += _render_pdf(str(f), out_dir, max_pages - len(res), start=len(res), label=lbl)
-                elif ext in IMAGE_EXTS:
+                elif ext in IMAGE_EXTS or ext in formats.HEIC_EXTS:
                     res += _render_image(io.BytesIO(a["data"]), out_dir, start=len(res), label=lbl)
                 elif ext in OFFICE_PAGED:
                     f = Path(tmp) / f"a{i}{ext}"
@@ -150,8 +267,15 @@ def render_to(path: str, ext: str, out_dir: Path, max_pages: int = 200, video_fr
         if not pdf:
             return [], 0
         res, total = _render_pdf(str(pdf), out_dir, max_pages, sheet=ext in SHEET_EXTS), _pdf_pages(str(pdf))
-    elif ext in IMAGE_EXTS:
-        res = _render_image(path, out_dir)
+    elif ext in IMAGE_EXTS or ext in formats.HEIC_EXTS or ext in formats.RAW_EXTS:
+        res = _render_image(path, out_dir, max_pages=max_pages)
+        total = formats.page_count(path) if ext in formats.TIFF_EXTS else len(res)
+    elif ext in formats.IWORK_EXTS:
+        res, total = _render_iwork(path, out_dir, max_pages)
+    elif formats.is_archive(path):
+        res, total = _render_archive(path, out_dir, max_pages)
+    elif ext in formats.AUDIO_EXTS:
+        res = _render_audio(path, out_dir)
         total = len(res)
     elif ext in video.VIDEO_EXTS:
         dur = video.probe(path).get("duration") or 0
@@ -185,4 +309,7 @@ CLOUD_NATIVE = {".gdoc", ".gsheet", ".gslides", ".gdraw"}  # Google-Formate: Dec
 
 def supports(ext: str) -> bool:
     return (ext == ".pdf" or ext in CLOUD_NATIVE or ext in OFFICE_PAGED or ext in IMAGE_EXTS or ext in mail.MAIL_EXTS
+            or ext in formats.HEIC_EXTS or ext in formats.RAW_EXTS or ext in formats.IWORK_EXTS
+            or ext in (".zip", ".tar", ".tgz", ".gz", ".bz2", ".xz") or (ext in (".7z", ".rar") and formats._seven_zip() is not None)
+            or (ext in formats.AUDIO_EXTS and (video.available() or formats.MUTAGEN_OK))
             or (ext in video.VIDEO_EXTS and video.available()))

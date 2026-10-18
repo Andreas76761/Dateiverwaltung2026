@@ -7,7 +7,9 @@ import type { Computer, FileItem, FileList } from "../types";
 
 // Dateitypen mit Seitenvorschau (Office über LibreOffice → PDF → alle Seiten)
 const PREVIEW_EXTS = ".pdf,.pptx,.ppt,.ppsx,.odp,.docx,.doc,.odt,.rtf,.xlsx,.xls,.xlsm,.ods,.png,.jpg,.jpeg" +
-  ",.mp4,.mov,.avi,.mkv,.m4v,.wmv,.webm,.mpg,.mpeg,.3gp,.mts,.eml,.msg";
+  ",.mp4,.mov,.avi,.mkv,.m4v,.wmv,.webm,.mpg,.mpeg,.3gp,.mts,.eml,.msg" +
+  ",.heic,.heif,.avif,.tif,.tiff,.webp,.cr2,.cr3,.nef,.arw,.dng,.raf,.orf,.rw2" +  // iPhone-Fotos, RAW, mehrseitige TIFF
+  ",.key,.pages,.numbers,.zip,.tar,.tgz,.gz,.7z,.rar,.mp3,.m4a,.flac,.wav,.ogg,.opus,.aac";  // iWork, Archive, Audio
 import { fmtBytes, fmtDate, fmtNum, GROUPS, shortLabel } from "../util";
 
 interface Facets {
@@ -284,8 +286,8 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
           </div>
         </div>
         <div className="filterbar">
-          <button className={`chip ${previewOnly ? "on" : ""}`} onClick={() => setPreviewOnly(!previewOnly)} title="Nur Dateien mit Vorschau: PDF, PPTX, DOCX, XLSX, PNG, JPEG, Videos (Standbilder), E-Mails (inkl. Anhänge)">
-            <Images size={12} /> PDF · Office · Bilder · Videos · E-Mails
+          <button className={`chip ${previewOnly ? "on" : ""}`} onClick={() => setPreviewOnly(!previewOnly)} title="Nur Dateien mit Vorschau: PDF, Office, Keynote/Pages/Numbers, Bilder (auch HEIC, RAW, mehrseitige TIFF), Videos (Standbilder), E-Mails (inkl. Anhänge), Archive (Inhalt) und Audio (Cover, Wellenform)">
+            <Images size={12} /> PDF · Office · Bilder · Videos · E-Mails · Archive · Audio
           </button>
           {GROUPS.map((g) => (
             <button key={g} className={`chip ${group === g ? "on" : ""}`} onClick={() => setGroup(group === g ? "" : g)}>

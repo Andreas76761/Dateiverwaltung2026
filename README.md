@@ -63,6 +63,21 @@ Je Gruppe wird eine Empfehlung markiert (★ höchste Versionsangabe bzw. neuest
 
 macOS (launchd) und Linux (systemd-Benutzerdienst): `./dienst-einrichten.sh …` mit denselben Befehlen; `--nur-anzeigen` zeigt vorher, was eingerichtet würde. Unter Windows wird bewusst die Aufgabenplanung „bei Anmeldung“ statt eines SYSTEM-Dienstes genutzt: So läuft der Agent als angemeldeter Benutzer und sieht dessen OneDrive/Google-Drive-Ordner. Der API-Key steht nicht in der Aufgabe, sondern in einer nur für den Benutzer lesbaren `agent.json`. Der Agent liest alle 24 Stunden (`--interval`) und auf Anforderung des Servers neu ein, meldet sich alle 10 Minuten und führt dabei nur freigegebene Kopien aus. Protokoll: `fdv-agent.log` (Pfad zeigt der Installer an).
 
+## Unterstützte Formate
+
+| Format | Vorschau | Inhalt für Suche & Einordnung |
+|---|---|---|
+| PDF, Word, Excel, PowerPoint, OpenDocument | alle Seiten (Office über LibreOffice) | Text, OCR bei Scans |
+| **Keynote, Pages, Numbers** | alle Seiten über LibreOffice, sonst die im Dokument gespeicherte Vorschau | Text (sonst Vorschau per OCR) |
+| Bilder JPEG/PNG/WebP, **HEIC/HEIF/AVIF** (iPhone) | Bild | EXIF: Aufnahmedatum, Kamera, GPS vorhanden · OCR |
+| **RAW** (CR2/CR3, NEF, ARW, DNG, RAF, ORF, RW2, PEF …) | eingebettete Kamera-Vorschau (auch ohne Zusatzpaket) | EXIF |
+| **Mehrseitige TIFF** (Faxe, Scans) | jede Seite | OCR aller Seiten |
+| **ZIP, TAR/TGZ** (7z/RAR mit installiertem 7-Zip) | Inhaltsverzeichnis + enthaltene Bilder, PDFs, Office-Dateien | Dateiliste + Text enthaltener Dokumente |
+| **Audio** (MP3, M4A, FLAC, WAV, OGG, Opus, WMA, AIFF) | Cover + Wellenform, Player im Detail | Titel, Interpret, Album, Jahr, Genre, Dauer |
+| Video, E-Mail (.eml/.msg) | Standbilder bzw. Mail + Anhänge | Metadaten bzw. Mailtext |
+
+Archive werden nur in den Speicher bzw. einen temporären Ordner gelesen – mit Größenlimits je Eintrag und insgesamt; Pfade aus dem Archiv werden nie verwendet. Eine „.key“-Datei, die keine Keynote-Datei ist (z. B. ein TLS-Schlüssel), wird weder gelesen noch angezeigt. HEIC, RAW und Audio-Tags nutzen die optionalen Pakete `pillow-heif`, `rawpy` und `mutagen` (in `requirements.txt`); ohne sie gibt es Ausweichwege (macOS `sips`, eingebettete RAW-Vorschau, ffmpeg).
+
 ## Programme & LLMs organisieren
 
 Jeder Computer meldet sein Inventar (dieser Server per „Inventar erfassen“, weitere Computer über den Agenten bzw. den Dienst): installierte Programme, LLM-Tools, Python-KI-Bibliotheken, **lokale Modelle** (Ollama direkt aus den Manifesten – auch wenn Ollama nicht läuft –, LM Studio, GPT4All, Jan, Hugging-Face-Cache, GGUF-Dateien) mit Größe und Fingerabdruck sowie **GPU-/Arbeitsspeicher**. Die Seite „Programme & LLMs“ hat vier Reiter:

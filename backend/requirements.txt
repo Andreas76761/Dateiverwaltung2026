@@ -14,3 +14,6 @@ pytest>=8.0
 imageio-ffmpeg>=0.5
 olefile>=0.47
 numpy>=1.26
+pillow-heif>=0.18   # HEIC/HEIF/AVIF (iPhone-Fotos) – optional
+rawpy>=0.21         # RAW-Kamerabilder (Fallback ohne Paket: eingebettete JPEG-Vorschau) – optional
+mutagen>=1.47       # Audio: Titel/Interpret/Album, Cover – optional

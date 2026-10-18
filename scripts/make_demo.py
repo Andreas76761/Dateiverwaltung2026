@@ -8,6 +8,8 @@ import json
 import os
 import random
 import shutil
+import subprocess
+import tarfile
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -216,6 +218,117 @@ def eml(p: Path, subject: str, sender: str, to: str, body: str, y: int, m: int, 
     stamp(p, y, m)
 
 
+def heic_photo(p: Path, y: int, m: int, seed: int, model: str = "iPhone 15 Pro"):
+    """iPhone-Foto im HEIC-Format mit EXIF (Aufnahmedatum, Kamera, GPS)."""
+    try:
+        import pillow_heif
+        pillow_heif.register_heif_opener()
+    except ImportError:
+        return
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".tmp.jpg")
+    photo(tmp, y, seed)
+    with Image.open(tmp) as im:
+        exif = Image.Exif()
+        exif[0x010F], exif[0x0110] = "Apple", model
+        exif[0x0132] = f"{y}:{m:02d}:14 18:22:05"
+        exif.get_ifd(0x8769)[0x9003] = f"{y}:{m:02d}:14 18:22:05"
+        exif.get_ifd(0x8825)[1] = "N"
+        im.save(p, format="HEIF", exif=exif.tobytes(), quality=80)
+    tmp.unlink()
+    stamp(p, y, m)
+
+
+def fake_raw(p: Path, y: int, seed: int):
+    """RAW-Datei wie aus der Kamera: Kopf + eingebettete JPEG-Vorschau (so lesen viele Programme die Vorschau)."""
+    import io as _io
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".tmp.jpg")
+    photo(tmp, y, seed)
+    buf = _io.BytesIO()
+    with Image.open(tmp) as im:
+        exif = Image.Exif()
+        exif[0x010F], exif[0x0110] = "NIKON CORPORATION", "NIKON Z 6II"
+        exif.get_ifd(0x8769)[0x9003] = f"{y}:05:03 09:41:12"
+        im.save(buf, "JPEG", quality=85, exif=exif.tobytes())
+    tmp.unlink()
+    p.write_bytes(b"II*\x00\x08\x00\x00\x00" + bytes(4096) + buf.getvalue() + bytes(range(256)) * 64)
+    stamp(p, y, 5)
+
+
+def multipage_tiff(p: Path, pages: list[list[str]], y: int):
+    """Mehrseitiges Fax/Scan als TIFF (ohne Textebene – für die OCR)."""
+    p.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        font = ImageFont.truetype("DejaVuSans.ttf", 30)
+        big = ImageFont.truetype("DejaVuSans-Bold.ttf", 44)
+    except OSError:
+        font = big = ImageFont.load_default()
+    ims = []
+    for lines in pages:
+        im = Image.new("L", (1240, 1754), 255)
+        dr = ImageDraw.Draw(im)
+        dr.text((90, 90), lines[0], fill=0, font=big)
+        for i, line in enumerate(lines[1:]):
+            dr.text((90, 200 + i * 54), line, fill=30, font=font)
+        ims.append(im)
+    ims[0].save(p, save_all=True, append_images=ims[1:], compression="tiff_deflate")
+    stamp(p, y, 2)
+
+
+def iwork(p: Path, title: str, lines: list[str], y: int, m: int = 4):
+    """Keynote/Pages-Datei (ZIP-Paket) mit gespeicherter Vorschau, wie sie macOS ablegt."""
+    import io as _io
+    p.parent.mkdir(parents=True, exist_ok=True)
+    im = Image.new("RGB", (1024, 768 if p.suffix == ".key" else 1448), (248, 250, 252) if p.suffix != ".key" else (30, 41, 99))
+    dr = ImageDraw.Draw(im)
+    try:
+        f1, f2 = ImageFont.truetype("DejaVuSans-Bold.ttf", 48), ImageFont.truetype("DejaVuSans.ttf", 28)
+    except OSError:
+        f1 = f2 = ImageFont.load_default()
+    fg = (255, 255, 255) if p.suffix == ".key" else (15, 23, 42)
+    dr.text((70, 80), title, fill=fg, font=f1)
+    for i, line in enumerate(lines):
+        dr.text((70, 190 + i * 50), line, fill=fg, font=f2)
+    buf = _io.BytesIO()
+    im.save(buf, "JPEG", quality=85)
+    with zipfile.ZipFile(p, "w") as z:
+        z.writestr("Index/Document.iwa", b"\x00demo")
+        z.writestr("Metadata/Properties.plist", "<plist><dict><key>title</key><string>%s</string></dict></plist>" % title)
+        z.writestr("preview.jpg", buf.getvalue())
+    stamp(p, y, m)
+
+
+def audio(p: Path, seconds: int, y: int, tags: dict | None = None, cover: Path | None = None, freq: int = 330):
+    """Audiodatei (Ton mit Lautstärkeverlauf) mit Titel/Interpret/Album und optional eingebettetem Cover."""
+    exe = shutil.which("ffmpeg")
+    if not exe:
+        try:
+            import imageio_ffmpeg
+            exe = imageio_ffmpeg.get_ffmpeg_exe()
+        except Exception:
+            return
+    p.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run([exe, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-t", str(seconds), "-i",
+                    f"sine=frequency={freq}:beep_factor=3", "-af", "volume='0.25+0.75*abs(sin(t/1.7))':eval=frame", "-y", str(p)],
+                   capture_output=True, timeout=60)
+    try:
+        if p.suffix == ".mp3" and (tags or cover):
+            from mutagen.id3 import APIC, COMM, ID3, TALB, TCON, TDRC, TIT2, TPE1
+            t = ID3()
+            for frame, key in ((TIT2, "title"), (TPE1, "artist"), (TALB, "album"), (TDRC, "date"), (TCON, "genre")):
+                if tags and tags.get(key):
+                    t.add(frame(encoding=3, text=tags[key]))
+            if tags and tags.get("comment"):
+                t.add(COMM(encoding=3, lang="deu", desc="", text=tags["comment"]))
+            if cover:
+                t.add(APIC(encoding=3, mime="image/jpeg", type=3, desc="Cover", data=cover.read_bytes()))
+            t.save(p)
+    except ImportError:
+        pass
+    stamp(p, y, 6)
+
+
 def binary(p: Path, size: int, y: int, header: bytes = b""):
     p.parent.mkdir(parents=True, exist_ok=True)
     with open(p, "wb") as fh:
@@ -403,6 +516,43 @@ def main():
         (gd / "Fotos").mkdir(parents=True, exist_ok=True)
         im.resize((480, 320)).save(gd / "Fotos/Strand_Lagos_klein.png")
         stamp(gd / "Fotos/Strand_Lagos_klein.png", 2025, 9)
+
+    # ---------- Weitere Formate: HEIC, RAW, mehrseitiges TIFF, Archive, Keynote/Pages, Audio ----------
+    heic_photo(mac / "Pictures/iPhone/IMG_5012.HEIC", 2025, 8, 21)
+    heic_photo(mac / "Pictures/iPhone/IMG_5013.HEIC", 2025, 8, 22)
+    fake_raw(pc_d / "Fotos/RAW/DSC_2001.NEF", 2024, 31)
+    multipage_tiff(pc_c / "Documents/Scans/Fax_Versicherung_2025.tif", [
+        ["Allianz Versicherungs-AG", "Telefax an: Andreas", "Betreff: Schadenmeldung Nr. 2025-4471", "Wasserschaden Küche vom 03.02.2025",
+         "Bitte senden Sie uns die Rechnung des Handwerkers."],
+        ["Seite 2 – Schadenaufstellung", "Trocknung: 1.240,00 EUR", "Bodenbelag: 2.310,00 EUR", "Selbstbeteiligung: 150,00 EUR"],
+        ["Seite 3 – Bankverbindung", "Erstattung auf IBAN DE12 7001 0080 0123 4567 89", "Frist: 30 Tage nach Eingang"]], 2025)
+    zp = lap / "Downloads/Projekt_Phoenix_Unterlagen.zip"
+    zp.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(zp, "w", zipfile.ZIP_DEFLATED) as z:
+        z.write(lap / "Documents/Projekt_Phoenix/Protokoll_JourFixe_2025-10-02.docx", "Phoenix/Protokoll_JourFixe_2025-10-02.docx")
+        z.write(pc_d / "Arbeit/Rechnungen/Rechnung_2025-0815_Nordwind.pdf", "Phoenix/Rechnung_2025-0815_Nordwind.pdf")
+        z.write(ws / "genai/architektur/RAG_Architektur.png", "Phoenix/Bilder/RAG_Architektur.png")
+        z.writestr("Phoenix/Notizen.txt", "Projekt Phoenix – offene Punkte: Lieferant Halbleiter, Meilenstein 4, Budgetfreigabe.")
+    stamp(zp, 2025, 10)
+    tg = usb / "Archiv/Fotos_2019.tar.gz"
+    tg.parent.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(tg, "w:gz") as t:
+        for f in sorted((pc_d / "Fotos/2019").glob("*.jpg")):
+            t.add(f, f"Fotos_2019/{f.name}")
+    stamp(tg, 2020, 1)
+    iwork(mac / "Documents/Keynote/Produktvorstellung_GenAI_2025.key", "Produktvorstellung GenAI-Assistent",
+          ["Use Cases im Einkauf", "Roadmap Q1–Q3 2026", "Budget & Lizenzen"], 2025, 11)
+    iwork(mac / "Documents/Pages/Brief_Vermieter_Nebenkosten.pages", "Brief an die Hausverwaltung",
+          ["Betreff: Nebenkostenabrechnung 2024", "Sehr geehrte Damen und Herren,", "ich widerspreche der Abrechnung …"], 2025, 3)
+    cover = mac / "Music/.cover.jpg"
+    photo(cover, 2024, 77)
+    audio(mac / "Music/Demo-Band - Sommerlied.mp3", 9, 2024, {"title": "Sommerlied", "artist": "Demo-Band", "album": "Sonne 2024",
+                                                            "date": "2024", "genre": "Pop"}, cover)
+    cover.unlink()
+    audio(lap / "Podcasts/KI-Podcast_Folge12.mp3", 12, 2025, {"title": "KI-Podcast Folge 12: RAG und Agenten", "artist": "KI-Update",
+                                                              "album": "KI-Podcast", "date": "2025", "genre": "Podcast",
+                                                              "comment": "Diesmal: Retrieval-Augmented Generation, LLM-Agenten und Claude."}, freq=220)
+    audio(pc_c / "Documents/Sprachmemos/Sprachmemo_Termin_Steuerberater.m4a", 5, 2026, freq=180)
 
     # ---------- Sonstiges ----------
     binary(lap / "Downloads/OllamaSetup.exe", 80_000, 2025, b"MZ")
