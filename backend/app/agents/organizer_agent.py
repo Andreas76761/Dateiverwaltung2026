@@ -19,18 +19,21 @@ def build_tree(only_primary: bool = True, status: str | None = None) -> dict:
     if status:
         where.append("review_status=?")
         args.append(status)
+    p = effective_path_sql()
+    # rtrim(p, replace(p,'/','')) = Ordnerteil des Pfads (alles bis zum letzten '/')
     rows = db.query(
-        f"SELECT {effective_path_sql()} p, size, review_status, group_name FROM files WHERE {' AND '.join(where)}", args
-    )
+        f"""SELECT rtrim(rtrim({p}, replace({p}, '/', '')), '/') AS folder, COUNT(*) n, COALESCE(SUM(size),0) size,
+                   SUM(review_status='freigegeben') approved, SUM(review_status='abgelehnt') rejected
+            FROM files WHERE {' AND '.join(where)} GROUP BY folder""", args)
     root = {"name": "", "path": "", "count": 0, "size": 0, "approved": 0, "rejected": 0, "children": {}}
     for r in rows:
-        parts = r["p"].split("/")[:-1]
+        parts = r["folder"].split("/") if r["folder"] else []
         node = root
         for depth in range(len(parts) + 1):
-            node["count"] += 1
-            node["size"] += r["size"] or 0
-            node["approved"] += r["review_status"] == "freigegeben"
-            node["rejected"] += r["review_status"] == "abgelehnt"
+            node["count"] += r["n"]
+            node["size"] += r["size"]
+            node["approved"] += r["approved"]
+            node["rejected"] += r["rejected"]
             if depth == len(parts):
                 break
             name = parts[depth]

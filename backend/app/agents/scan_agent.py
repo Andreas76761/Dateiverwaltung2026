@@ -22,33 +22,42 @@ def upsert_entries(conn, computer_id: str, volume_id: str, entries: list[dict]) 
     """Gemeinsame Ingest-Logik für lokalen Scan und Agent-Push. -> {rel_path: file_id}"""
     ids = {}
     ts = db.now()
+    existing = {}
+    for i in range(0, len(entries), 500):  # vorhandene Einträge blockweise statt einzeln nachschlagen
+        part = [e["rel_path"] for e in entries[i:i + 500]]
+        for r in conn.execute(f"SELECT id, rel_path, size, mtime, online_only FROM files WHERE volume_id=? AND rel_path IN "
+                              f"({','.join('?' * len(part))})", (volume_id, *part)):
+            existing[r["rel_path"]] = r
     for e in entries:
         ext, ftype, mime = detect(e["name"])
-        row = conn.execute(
-            "SELECT id, size, mtime FROM files WHERE volume_id=? AND rel_path=?", (volume_id, e["rel_path"])
-        ).fetchone()
+        online = int(bool(e.get("online_only")))
+        row = existing.get(e["rel_path"])
         if row is None:
             cur = conn.execute(
                 """INSERT INTO files(computer_id, volume_id, path, rel_path, name, ext, file_type, mime, size, mtime, ctime,
-                   sha256, text_excerpt, page_count, scanned_at, status)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'eingelesen')""",
+                   sha256, text_excerpt, page_count, scanned_at, status, online_only)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'eingelesen', ?)""",
                 (computer_id, volume_id, e["path"], e["rel_path"], e["name"], ext, ftype, mime, e["size"], e["mtime"],
-                 e.get("ctime"), e.get("sha256"), e.get("text_excerpt"), e.get("page_count"), ts),
+                 e.get("ctime"), e.get("sha256"), e.get("text_excerpt"), e.get("page_count"), ts, online),
             )
             ids[e["rel_path"]] = cur.lastrowid
+            db.fts_update(conn, cur.lastrowid)
         else:
-            changed = row["size"] != e["size"] or row["mtime"] != e["mtime"]
+            # Geändert – oder inzwischen heruntergeladen (vorher nur online): Inhalt neu analysieren
+            changed = row["size"] != e["size"] or row["mtime"] != e["mtime"] or (row["online_only"] and not online)
             if changed:
                 conn.execute(
-                    """UPDATE files SET path=?, size=?, mtime=?, ctime=?, sha256=?, text_excerpt=COALESCE(?, text_excerpt),
-                       page_count=COALESCE(?, page_count), status='eingelesen', scanned_at=?, missing=0 WHERE id=?""",
+                    """UPDATE files SET path=?, size=?, mtime=?, ctime=?, sha256=?, quick_hash=NULL,
+                       text_excerpt=COALESCE(?, text_excerpt), page_count=COALESCE(?, page_count), status='eingelesen',
+                       thumbs_complete=0, scanned_at=?, missing=0, online_only=? WHERE id=?""",
                     (e["path"], e["size"], e["mtime"], e.get("ctime"), e.get("sha256"), e.get("text_excerpt"),
-                     e.get("page_count"), ts, row["id"]),
+                     e.get("page_count"), ts, online, row["id"]),
                 )
+                db.fts_update(conn, row["id"])
             else:
                 conn.execute(
-                    "UPDATE files SET scanned_at=?, missing=0, sha256=COALESCE(?, sha256) WHERE id=?",
-                    (ts, e.get("sha256"), row["id"]),
+                    "UPDATE files SET path=?, scanned_at=?, missing=0, online_only=?, sha256=COALESCE(?, sha256) WHERE id=?",
+                    (e["path"], ts, online, e.get("sha256"), row["id"]),
                 )
             ids[e["rel_path"]] = row["id"]
     return ids
@@ -70,6 +79,7 @@ def scan_volume(job: Job, vol: dict, counters: dict) -> None:
         batch.append(entry.__dict__)
         counters["dateien"] += 1
         counters["bytes"] += entry.size
+        counters["nur_online"] += int(entry.online_only)
         if len(batch) >= BATCH:
             flush()
             job.update(progress=counters["dateien"], message=f"{vol['name']}: {counters['dateien']} Dateien", **counters)
@@ -92,32 +102,87 @@ def scan_volume(job: Job, vol: dict, counters: dict) -> None:
     counters.setdefault("fehlerliste", []).extend(errors[:20])
 
 
+QUICK_CHUNK = 1024 * 1024
+
+
+def _save(pending: list[tuple[str, int]], col: str) -> None:
+    if pending:
+        with db.tx() as c:
+            c.executemany(f"UPDATE files SET {col}=? WHERE id=?", pending)
+        pending.clear()
+
+
+def quick_hash(path: str, size: int) -> str:
+    """Schnell-Prüfsumme: Größe + erstes und letztes MB. Nur Vorfilter – Duplikate bestätigt erst SHA-256."""
+    import hashlib
+
+    h = hashlib.sha1(str(size).encode())
+    with open(path, "rb") as fh:
+        h.update(fh.read(QUICK_CHUNK))
+        if size > 2 * QUICK_CHUNK:
+            fh.seek(-QUICK_CHUNK, os.SEEK_END)
+            h.update(fh.read(QUICK_CHUNK))
+    return h.hexdigest()
+
+
 def compute_duplicates(job: Job | None = None) -> dict:
-    """Prüfsummen nur für Dateien gleicher Größe berechnen (schnell), dann Duplikatgruppen bilden."""
+    """Duplikate effizient finden – auch bei Millionen Dateien und großen Videos:
+    1. nur Dateien mit gleicher Größe kommen in Frage (ohne Lesen),
+    2. davon Schnell-Prüfsumme (2 MB lesen),
+    3. nur bei gleicher Schnell-Prüfsumme vollständiger SHA-256.
+    Cloud-Platzhalter (nur online) werden nie gelesen."""
     s = get_settings()
-    max_bytes = int(s.analysis.get("hash_max_mb", 2048)) * 1024 * 1024
+    max_bytes = int(s.analysis.get("hash_max_mb", 4096)) * 1024 * 1024
     local_comp = {c["id"] for c in s.computers if c["mode"] == "local"}
-    cands = db.query(
-        """SELECT id, path, computer_id, size FROM files
-           WHERE missing=0 AND size>0 AND sha256 IS NULL AND size IN (
-             SELECT size FROM files WHERE missing=0 AND size>0 GROUP BY size HAVING COUNT(*)>1)"""
-    )
-    hashed = 0
+    allow_online = bool(s.cloud.get("download_online_only"))
+    readable = lambda f: (f["computer_id"] in local_comp and (allow_online or not f["online_only"])
+                          and os.path.isfile(f["path"]))
+    same_size = """SELECT size FROM files WHERE missing=0 AND size>0 GROUP BY size HAVING COUNT(*)>1"""
+
+    # Stufe 2: Schnell-Prüfsumme
+    cands = db.query(f"""SELECT id, path, computer_id, size, online_only FROM files
+                         WHERE missing=0 AND size>0 AND sha256 IS NULL AND quick_hash IS NULL AND size IN ({same_size})""")
+    quick, pending = 0, []
     for i, f in enumerate(cands):
         if job and job.cancelled:
             break
-        if f["computer_id"] not in local_comp or f["size"] > max_bytes or not os.path.isfile(f["path"]):
+        if not readable(f):
             continue
         try:
-            h = sha256_file(f["path"])
+            pending.append((quick_hash(f["path"], f["size"]), f["id"]))
         except OSError:
             continue
-        with db.tx() as c:
-            c.execute("UPDATE files SET sha256=? WHERE id=?", (h, f["id"]))
+        quick += 1
+        if len(pending) >= 500:
+            _save(pending, "quick_hash")
+        if job and i % 200 == 0:
+            job.update(message=f"Schnell-Prüfsummen: {i}/{len(cands)}")
+    _save(pending, "quick_hash")
+
+    # Stufe 3: SHA-256 nur, wo Größe UND Schnell-Prüfsumme übereinstimmen (oder Gegenstück schon SHA hat, z. B. vom Agenten)
+    cands = db.query(
+        """SELECT f.id, f.path, f.computer_id, f.size, f.online_only FROM files f
+           WHERE f.missing=0 AND f.size>0 AND f.sha256 IS NULL AND (
+             f.quick_hash IN (SELECT quick_hash FROM files WHERE quick_hash IS NOT NULL AND missing=0
+                              GROUP BY quick_hash HAVING COUNT(*)>1)
+             OR f.size IN (SELECT size FROM files WHERE sha256 IS NOT NULL AND missing=0))""")
+    hashed, pending = 0, []
+    for i, f in enumerate(cands):
+        if job and job.cancelled:
+            break
+        if f["size"] > max_bytes or not readable(f):
+            continue
+        try:
+            pending.append((sha256_file(f["path"]), f["id"]))
+        except OSError:
+            continue
         hashed += 1
+        if len(pending) >= 200:
+            _save(pending, "sha256")
         if job and i % 50 == 0:
             job.update(message=f"Prüfsummen: {i}/{len(cands)}")
-    return refresh_dup_groups() | {"prüfsummen_berechnet": hashed}
+    _save(pending, "sha256")
+    return refresh_dup_groups() | {"schnellprüfsummen": quick, "prüfsummen_berechnet": hashed}
 
 
 def refresh_dup_groups() -> dict:
@@ -173,7 +238,7 @@ def run(job: Job, params: dict) -> dict:
         for v in comp["volumes"]:
             if (not wanted or v["id"] in wanted) and os.path.isdir(v["path"]):
                 vols.append({**v, "computer_id": comp["id"]})
-    counters = {"dateien": 0, "bytes": 0, "fehler": 0, "nicht_mehr_gefunden": 0, "festplatten": len(vols)}
+    counters = {"dateien": 0, "bytes": 0, "fehler": 0, "nicht_mehr_gefunden": 0, "nur_online": 0, "festplatten": len(vols)}
     for vol in vols:
         if job.cancelled:
             break

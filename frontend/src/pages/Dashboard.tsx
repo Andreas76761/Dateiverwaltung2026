@@ -1,5 +1,7 @@
 import { CheckCircle2, CloudUpload, Copy, FileSearch, FolderTree, HardDrive, Laptop, Loader2, Play, ScanLine, ShieldCheck, Sparkles, Square } from "lucide-react";
+import { useState } from "react";
 import { get, post } from "../api";
+import CostDialog from "../components/CostDialog";
 import { Empty, GroupBadge, Importance, useAsync, useJobs, useToast } from "../components/ui";
 import type { Job } from "../types";
 import { fmtBytes, fmtDate, fmtNum, groupClass } from "../util";
@@ -28,12 +30,16 @@ export default function Dashboard({ go }: { go: (page: string) => void }) {
     }
   };
   const last = (kind: string) => jobs.find((j) => j.kind === kind);
+  const [costDialog, setCostDialog] = useState<null | { force: boolean }>(null);
+  const startAnalyze = (force: boolean) =>
+    s?.llm_provider === "anthropic" ? setCostDialog({ force }) : start("/api/pipeline/analyze", { force });
   if (!s) return <div className="faint">Lädt …</div>;
   const t = s.totals;
   const groupTotal = s.by_group.reduce((a: number, g: any) => a + g.n, 0) || 1;
 
   return (
     <div className="col" style={{ gap: 18 }}>
+      {costDialog && <CostDialog force={costDialog.force} onClose={() => setCostDialog(null)} onStarted={refresh} />}
       <div className="page-head">
         <div>
           <h1>Übersicht</h1>
@@ -47,7 +53,7 @@ export default function Dashboard({ go }: { go: (page: string) => void }) {
       </div>
 
       <div className="grid g4">
-        <div className="card kpi"><div className="k-label"><FileSearch size={14} /> Dateien erfasst</div><div className="k-val">{fmtNum(t.files)}</div><div className="k-sub">{fmtBytes(t.bytes)}</div></div>
+        <div className="card kpi"><div className="k-label"><FileSearch size={14} /> Dateien erfasst</div><div className="k-val">{fmtNum(t.files)}</div><div className="k-sub">{fmtBytes(t.bytes)}{t.online_only ? ` · ☁ ${fmtNum(t.online_only)} nur online` : ""}</div></div>
         <div className="card kpi"><div className="k-label"><Sparkles size={14} /> Analysiert</div><div className="k-val">{fmtNum(t.analyzed)}</div><div className="k-sub">{t.files ? Math.round((t.analyzed / t.files) * 100) : 0} % · {fmtNum(s.thumbnails)} Miniaturen · {fmtNum(t.ocr)} OCR</div></div>
         <div className="card kpi"><div className="k-label"><Copy size={14} /> Duplikate</div><div className="k-val">{fmtNum(t.dup_files)}</div><div className="k-sub">{fmtNum(t.dup_groups)} Gruppen · {fmtBytes(t.dup_bytes)} doppelt</div></div>
         <div className="card kpi"><div className="k-label"><CheckCircle2 size={14} /> Freigegeben / kopiert</div><div className="k-val">{fmtNum(t.approved)} <span className="faint" style={{ fontSize: 16 }}>/ {fmtNum(s.copies?.copied)}</span></div><div className="k-sub">{fmtNum(t.rejected)} abgelehnt · {fmtBytes(s.copies?.bytes)} kopiert</div></div>
@@ -80,7 +86,11 @@ export default function Dashboard({ go }: { go: (page: string) => void }) {
               ) : (
                 <div className="stats">
                   {j?.kind === "scan" && <><span>{fmtNum(j.stats.dateien)} Dateien</span><span>{fmtNum(j.stats.duplikatgruppen)} Duplikatgruppen</span></>}
-                  {j?.kind === "analyze" && <><span>{fmtNum(j.stats.analysiert)} analysiert</span><span>{fmtNum(j.stats.miniaturen)} Seiten</span><span>{fmtNum(j.stats.ocr)} OCR</span><span>LLM: {j.stats.provider}</span></>}
+                  {j?.kind === "analyze" && <><span>{fmtNum(j.stats.analysiert)} analysiert</span><span>{fmtNum(j.stats.miniaturen)} Seiten</span><span>{fmtNum(j.stats.ocr)} OCR</span><span>LLM: {j.stats.provider}</span>
+                    {j.stats.llm > 0 && <span>{fmtNum(j.stats.llm)}× Claude</span>}
+                    {j.stats.nur_regeln > 0 && <span>{fmtNum(j.stats.nur_regeln)}× offline sicher</span>}
+                    {j.stats.kosten_usd > 0 && <span><b>{j.stats.kosten_usd.toLocaleString("de-DE", { maximumFractionDigits: 3 })} $</b></span>}
+                    {j.stats.kostenlimit_erreicht && <span style={{ color: "var(--warn)" }}>Kostenlimit erreicht</span>}</>}
                   {j?.kind === "analyze" && j.stats.llm_fallback > 0 && (
                     <span style={{ color: "var(--warn)" }} title={j.stats.llm_fehler}>⚠ {fmtNum(j.stats.llm_fallback)}× Offline-Regeln statt LLM: {j.stats.llm_fehler}</span>
                   )}
@@ -92,11 +102,11 @@ export default function Dashboard({ go }: { go: (page: string) => void }) {
                 {st.kind === "copy" ? (
                   <button className="btn primary" onClick={() => go("copy")}><Play size={14} /> Zur Kopie</button>
                 ) : (
-                  <button className="btn primary" disabled={isRunning} onClick={() => start(st.url)}>
+                  <button className="btn primary" disabled={isRunning} onClick={() => (st.kind === "analyze" ? startAnalyze(false) : start(st.url))}>
                     {isRunning ? <Loader2 size={14} className="spin" /> : <Play size={14} />} Starten
                   </button>
                 )}
-                {st.kind === "analyze" && <button className="btn" disabled={isRunning} onClick={() => start(st.url, { force: true })}>Alle neu</button>}
+                {st.kind === "analyze" && <button className="btn" disabled={isRunning} onClick={() => startAnalyze(true)}>Alle neu</button>}
                 {st.kind === "propose" && <button className="btn" onClick={() => go("proposal")}>Prüfen</button>}
                 {st.kind === "scan" && <button className="btn" onClick={() => go("explorer")}>Explorer</button>}
               </div>

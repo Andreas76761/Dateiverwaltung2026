@@ -22,10 +22,29 @@ FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
 async def lifespan(app: FastAPI):
     db.init_db()
     system.load_overrides()
-    jobs.recover_stale()
+    stale = jobs.recover_stale()
     s = get_settings()
+    _auto_resume(stale)
     logging.getLogger("fdv").info("Konfiguration: %s | Ziel: %s | LLM: %s", s.source, s.target_root, s.llm["provider"])
     yield
+
+
+def _auto_resume(stale: list[dict]) -> None:
+    """Unterbrochene Analyse bzw. laufende Anthropic-Batches nach einem Neustart automatisch fortsetzen.
+    Bereits analysierte Dateien werden übersprungen – es geht dort weiter, wo der Lauf aufgehört hat."""
+    import json
+
+    from .agents import analysis_agent
+    from .llm import batch
+
+    if not get_settings().analysis.get("auto_resume", True):
+        return
+    prev = next((j for j in stale if j["kind"] == "analyze"), None)
+    if prev or (get_settings().llm["provider"] == "anthropic" and batch.pending()):
+        params = json.loads(prev["params"]) if prev and prev.get("params") else {}
+        params.update({"force": False, "fortgesetzt": True})  # nicht erneut alles, nur den Rest
+        jobs.start("analyze", analysis_agent.run, params)
+        logging.getLogger("fdv").info("Unterbrochene Analyse wird fortgesetzt")
 
 
 app = FastAPI(title="Future Dateiverwaltung", version="1.0.0", lifespan=lifespan,

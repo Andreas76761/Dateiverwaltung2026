@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Bot, CheckCircle2, KeyRound, Loader2, Save, ShieldCheck, XCircle, Zap } from "lucide-react";
 import { apiKey, get, post, setApiKey } from "../api";
 import { useAsync, useToast } from "../components/ui";
-import { fmtNum, GROUPS } from "../util";
+import { fmtBytes, fmtNum, GROUPS } from "../util";
 
 export default function Settings() {
   const toast = useToast();
@@ -26,7 +26,10 @@ export default function Settings() {
     }
   };
   useEffect(() => {
-    if (s.data) setForm({ provider: s.data.llm.provider, anthropic_model: s.data.llm.anthropic_model, ollama_url: s.data.llm.ollama_url, ollama_model: s.data.llm.ollama_model, send_content_to_cloud: s.data.llm.send_content_to_cloud, target_structure: s.data.target_structure, ocr: s.data.analysis.ocr });
+    if (s.data) setForm({ provider: s.data.llm.provider, anthropic_model: s.data.llm.anthropic_model, ollama_url: s.data.llm.ollama_url, ollama_model: s.data.llm.ollama_model, send_content_to_cloud: s.data.llm.send_content_to_cloud, target_structure: s.data.target_structure, ocr: s.data.analysis.ocr,
+      mode: s.data.llm.mode, batch: s.data.llm.batch, max_cost_usd: s.data.llm.max_cost_usd,
+      thumbnails_mode: s.data.analysis.thumbnails_mode, thumbs_budget_gb: s.data.analysis.thumbs_budget_gb,
+      download_online_only: s.data.cloud.download_online_only });
   }, [s.data]);
   if (!s.data || !form) return <div className="faint">Lädt …</div>;
   const save = async () => {
@@ -63,6 +66,24 @@ export default function Settings() {
               <div className="row" style={{ fontSize: 12.5 }}><Ok v={s.data.llm.anthropic_key_present} /> ANTHROPIC_API_KEY {s.data.llm.anthropic_key_present ? "gefunden" : "nicht gesetzt (Umgebungsvariable auf dem Server setzen)"}</div>
               <label className="switch"><input type="checkbox" checked={form.send_content_to_cloud} onChange={(e) => setForm({ ...form, send_content_to_cloud: e.target.checked })} /> Dateiinhalte (Textauszug) an die Cloud-API senden</label>
               {!form.send_content_to_cloud && <div className="callout warn" style={{ fontSize: 12.5 }}>Datenschutzmodus: Es werden nur Dateiname, Pfad und Metadaten übermittelt. Für bessere Ergebnisse aktivieren oder lokal mit Ollama arbeiten.</div>}
+              <div className="card card-pad col" style={{ gap: 8, boxShadow: "none", background: "var(--panel-2)" }}>
+                <b style={{ fontSize: 13 }}>Kosten steuern</b>
+                <div className="row wrap">
+                  <span style={{ fontSize: 12.5 }}>Standard für neue Läufe:</span>
+                  <div className="seg">
+                    <button className={form.mode === "unklare" ? "on" : ""} onClick={() => setForm({ ...form, mode: "unklare" })}>Nur unklare Dateien</button>
+                    <button className={form.mode === "alle" ? "on" : ""} onClick={() => setForm({ ...form, mode: "alle" })}>Alle Dateien</button>
+                  </div>
+                </div>
+                <label className="switch"><input type="checkbox" checked={form.batch} onChange={(e) => setForm({ ...form, batch: e.target.checked })} /> Batch-Verarbeitung (−50 %, Ergebnis meist innerhalb 1 Stunde)</label>
+                <label className="row" style={{ fontSize: 12.5 }}>Kostenlimit je Lauf
+                  <input className="input" type="number" min={0} style={{ width: 90 }} value={form.max_cost_usd} onChange={(e) => setForm({ ...form, max_cost_usd: Number(e.target.value) })} /> $
+                  <span className="faint">(0 = ohne)</span></label>
+                <span className="faint" style={{ fontSize: 12 }}>
+                  Bisher ausgegeben: <b>{(s.data.llm_kosten.kosten_usd ?? 0).toLocaleString("de-DE", { maximumFractionDigits: 3 })} $</b> in {fmtNum(s.data.llm_kosten.aufrufe)} Aufrufen ·
+                  Vor jedem Lauf erscheint eine Kostenschätzung zur Bestätigung.
+                </span>
+              </div>
             </>
           )}
           {form.provider === "ollama" && (
@@ -100,6 +121,29 @@ export default function Settings() {
             <input className="input mono" value={form.target_structure} onChange={(e) => setForm({ ...form, target_structure: e.target.value })} /></label>
           <div className="pathbox new">{s.data.target_root}/{form.target_structure.replace("{group}", "02_Beruf").replace("{category}", "Projekte").replace("{year}", "2025").replace("{month}", "10").replace("{subcategory}", "Phoenix").replace("{type}", "PDF")}/Datei.pdf</div>
           <label className="switch"><input type="checkbox" checked={form.ocr} onChange={(e) => setForm({ ...form, ocr: e.target.checked })} /> OCR für Bilder & gescannte PDFs</label>
+          <div className="col" style={{ gap: 6 }}>
+            <span className="faint" style={{ fontSize: 12 }}>Miniaturen (alle Seiten)</span>
+            <div className="seg" style={{ alignSelf: "flex-start" }}>
+              {[["smart", "Wichtige sofort"], ["alle", "Alle sofort"], ["bei_bedarf", "Nur beim Öffnen"]].map(([k, l]) => (
+                <button key={k} className={form.thumbnails_mode === k ? "on" : ""} onClick={() => setForm({ ...form, thumbnails_mode: k })}>{l}</button>
+              ))}
+            </div>
+            <span className="faint" style={{ fontSize: 11.5 }}>Deckblatt immer; alle Seiten sofort nur für Dateien ab Wichtigkeit {s.data.analysis.thumbs_all_pages_min_importance} – der Rest beim ersten Öffnen.</span>
+            <label className="row" style={{ fontSize: 12.5 }}>Speicher-Obergrenze
+              <input className="input" type="number" min={1} style={{ width: 80 }} value={form.thumbs_budget_gb} onChange={(e) => setForm({ ...form, thumbs_budget_gb: Number(e.target.value) })} /> GB</label>
+            <div className="row" style={{ fontSize: 12 }}>
+              <div className="progress grow"><div style={{ width: `${Math.min(100, (s.data.cache.total_bytes / Math.max(1, s.data.cache.budget_bytes)) * 100)}%` }} /></div>
+              <span className="faint nowrap">{fmtBytes(s.data.cache.total_bytes)} von {fmtBytes(s.data.cache.budget_bytes)}</span>
+            </div>
+            <span className="faint" style={{ fontSize: 11.5 }}>{fmtNum(s.data.cache.thumbs_pages)} Seitenbilder · {fmtNum(s.data.cache.complete_files)} Dateien vollständig · {fmtNum(s.data.cache.cover_only_files)} nur Deckblatt. Wird die Grenze erreicht, werden zuerst Folgeseiten unwichtiger Dateien aus dem Cache entfernt (nie Ihre Dateien).</span>
+          </div>
+          <div className="col" style={{ gap: 6 }}>
+            <span className="faint" style={{ fontSize: 12 }}>Cloud-Dateien „nur online“ (OneDrive, Google Drive, iCloud, Dropbox, Nextcloud)</span>
+            <label className="switch"><input type="checkbox" checked={form.download_online_only} onChange={(e) => setForm({ ...form, download_online_only: e.target.checked })} /> Inhalte lesen und kopieren (löst den Download aus)</label>
+            {form.download_online_only
+              ? <div className="callout warn" style={{ fontSize: 12 }}>Achtung: Analyse und Kopie laden Nur-online-Dateien herunter – bei großen Cloud-Ablagen kann die Festplatte volllaufen.</div>
+              : <span className="faint" style={{ fontSize: 11.5 }}>Standard: nur Metadaten (Name, Pfad, Größe, Datum) – es wird nichts heruntergeladen.</span>}
+          </div>
           <div className="col" style={{ gap: 5, fontSize: 12.5 }}>
             <div className="row"><Ok v={s.data.ocr_available} /> Tesseract OCR</div>
             <div className="row"><Ok v={s.data.libreoffice_available} /> LibreOffice (Miniaturen für PPTX/DOCX/XLSX)</div>

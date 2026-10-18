@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Cloud, Copy, Folder, FolderOpen, GalleryHorizontal, HardDrive, Images, LayoutGrid, Laptop, List, PanelLeftClose, PanelLeftOpen, Pin, Search, Usb, X } from "lucide-react";
-import { get, qs, thumbUrl } from "../api";
+import { get, post, qs, thumbUrl } from "../api";
 import FileDetail from "../components/FileDetail";
-import { FileIcon, FileThumbOrIcon, GroupBadge, Importance, Labels, PageViewer, ReviewBadge, useAsync, useJobs } from "../components/ui";
+import { FileIcon, FileThumbOrIcon, GroupBadge, Importance, Labels, OnlineBadge, PageViewer, ReviewBadge, useAsync, useJobs } from "../components/ui";
 import type { Computer, FileItem, FileList } from "../types";
 
 // Dateitypen mit Seitenvorschau (Office über LibreOffice → PDF → alle Seiten)
@@ -19,8 +19,20 @@ interface Facets {
 type View = "list" | "grid" | "pages";
 const PREVIEW_PAGES = 24; // so viele Seiten je Datei sofort, Rest per Klick
 
-function PageStrip({ f, selected, onOpen, onPage }: { f: FileItem; selected: boolean; onOpen: () => void; onPage: (p: number) => void }) {
+function PageStrip({ f, selected, onOpen, onPage, onChanged }: { f: FileItem; selected: boolean; onOpen: () => void; onPage: (p: number) => void; onChanged: () => void }) {
   const [all, setAll] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const loadAll = async () => {
+    setLoading(true);
+    try {
+      await post(`/api/files/${f.id}/thumbs/ensure`);
+      onChanged();
+    } catch {
+      /* z. B. Agent-Computer – Hinweis steht in der Detailansicht */
+    } finally {
+      setLoading(false);
+    }
+  };
   const n = all ? f.thumbs : Math.min(f.thumbs, PREVIEW_PAGES);
   const isVideo = f.file_type === "Video";
   const wide = f.file_type === "Präsentation" || isVideo;
@@ -33,10 +45,12 @@ function PageStrip({ f, selected, onOpen, onPage }: { f: FileItem; selected: boo
         <div className="grow">
           <div className="ellipsis" style={{ fontWeight: 600 }}>{f.name}</div>
           <div className="faint ellipsis" style={{ fontSize: 11.5 }}>
-            {f.thumbs > 1 ? `${f.thumbs} ${unit[1]} · ` : f.thumbs === 1 ? `1 ${unit[0]} · ` : ""}
+            {!f.thumbs_complete && f.page_count && f.page_count > f.thumbs ? `${f.thumbs} von ${f.page_count} ${unit[1]} · `
+              : f.thumbs > 1 ? `${f.thumbs} ${unit[1]} · ` : f.thumbs === 1 ? `1 ${unit[0]} · ` : ""}
             {nAtt > 0 ? `${nAtt} ${nAtt === 1 ? "Anhang" : "Anhänge"} · ` : ""}{f.computer_name} · {f.volume_name} · {fmtDate(f.mtime)} · {fmtBytes(f.size)}
           </div>
         </div>
+        {f.online_only ? <OnlineBadge /> : null}
         <GroupBadge group={f.group_name} />
         {f.category && <span className="badge outline">{f.category}</span>}
         {f.dup_count > 1 && <span className={`badge ${f.is_primary ? "warn" : "bad"}`}>{f.dup_count}×</span>}
@@ -53,9 +67,18 @@ function PageStrip({ f, selected, onOpen, onPage }: { f: FileItem; selected: boo
             </div>
           ))}
           {f.thumbs > n && <button className="btn sm pv-more" onClick={() => setAll(true)}>+ {f.thumbs - n} weitere Seiten</button>}
+          {!f.thumbs_complete && f.thumbs > 0 && !f.online_only && (
+            <button className="btn sm pv-more" disabled={loading} onClick={loadAll} title="Bisher liegt nur das Deckblatt im Cache">
+              {loading ? "Seiten werden erzeugt …" : `Alle ${f.page_count && f.page_count > 1 ? f.page_count + " " : ""}Seiten laden`}
+            </button>
+          )}
         </div>
       ) : (
-        <div className="faint" style={{ padding: "10px 12px", fontSize: 12.5 }}>Keine Miniaturansicht – Datei noch nicht analysiert oder Dateityp ohne Vorschau.</div>
+        <div className="faint" style={{ padding: "10px 12px", fontSize: 12.5 }}>
+          {f.online_only
+            ? "Nur online – keine Vorschau, damit kein Download aus der Cloud ausgelöst wird."
+            : "Keine Miniaturansicht – Datei noch nicht analysiert oder Dateityp ohne Vorschau."}
+        </div>
       )}
     </div>
   );
@@ -134,6 +157,7 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
     try { return (localStorage.getItem("fdv-view") as View) || "list"; } catch { return "list"; }
   });
   const [previewOnly, setPreviewOnly] = useState(false);
+  const [online, setOnline] = useState(params.get("online") || "");
   const [showTree, setShowTree] = useState<boolean>(() => {
     try { return localStorage.getItem("fdv-tree") !== "0"; } catch { return true; }
   });
@@ -161,8 +185,9 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
     category, file_type: fileType, label, dup, review, date_from: dateFrom, date_to: dateTo, sort, order,
     status: group === "(nicht analysiert)" ? "eingelesen" : undefined,
     ext: previewOnly ? PREVIEW_EXTS : undefined,
+    online,
     limit,
-  }), [qDebounced, sel, group, category, fileType, label, dup, review, dateFrom, dateTo, sort, order, limit, previewOnly, view]);
+  }), [qDebounced, sel, group, category, fileType, label, dup, review, dateFrom, dateTo, sort, order, limit, previewOnly, view, online]);
   const list = useAsync<FileList>(() => get(`/api/files${query}`), [query, version, tick]);
 
   const setSortCol = (c: string) => {
@@ -174,8 +199,8 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
       <span className="row" style={{ gap: 3 }}>{children}{sort === c && (order === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}</span>
     </th>
   );
-  const anyFilter = previewOnly || group || category || fileType || label || dup || review || dateFrom || dateTo || qDebounced;
-  const reset = () => { setGroup(""); setCategory(""); setFileType(""); setLabel(""); setDup(""); setReview(""); setDateFrom(""); setDateTo(""); setQ(""); setPreviewOnly(false); };
+  const anyFilter = online || previewOnly || group || category || fileType || label || dup || review || dateFrom || dateTo || qDebounced;
+  const reset = () => { setGroup(""); setCategory(""); setFileType(""); setLabel(""); setDup(""); setReview(""); setDateFrom(""); setDateTo(""); setQ(""); setPreviewOnly(false); setOnline(""); };
   const items = list.data?.items ?? [];
   const compact = detail !== null;
   const selName = (() => {
@@ -272,6 +297,11 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
             <option value="nur_kopien">nur überzählige Kopien</option>
             <option value="nein">ohne Duplikate</option>
           </select>
+          <select className="input" style={{ padding: "3px 8px", fontSize: 12 }} value={online} onChange={(e) => setOnline(e.target.value)} title="Cloud-Dateien, die nur online liegen, werden nie gelesen">
+            <option value="">Speicherort: alle</option>
+            <option value="nein">lokal verfügbar</option>
+            <option value="ja">☁ nur online</option>
+          </select>
           <select className="input" style={{ padding: "3px 8px", fontSize: 12 }} value={review} onChange={(e) => setReview(e.target.value)}>
             <option value="">Prüfstatus</option>
             <option value="offen">offen</option>
@@ -289,7 +319,7 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
           {view === "pages" ? (
             <div className="pages-view">
               {items.map((f) => (
-                <PageStrip key={f.id} f={f} selected={detail === f.id} onOpen={() => setDetail(f.id)}
+                <PageStrip key={f.id} f={f} selected={detail === f.id} onOpen={() => setDetail(f.id)} onChanged={() => setTick((t) => t + 1)}
                   onPage={(p) => setViewer({ id: f.id, name: f.name, pages: f.thumbs, page: p, labels: f.thumb_labels, video: f.file_type === "Video" })} />
               ))}
             </div>
@@ -317,6 +347,7 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
                             {f.pinned ? <Pin size={12} color="var(--accent)" /> : null}
                             <span className="ellipsis">{f.name}</span>
                             {f.dup_count > 1 && <span className={`badge ${f.is_primary ? "warn" : "bad"}`} style={{ fontSize: 10, padding: "0 6px" }}>{f.dup_count}×</span>}
+                            {f.online_only ? <OnlineBadge small /> : null}
                           </div>
                           <div className="p ellipsis">{f.file_type}{f.page_count ? ` · ${f.page_count} S.` : ""} · {f.rel_path}</div>
                         </div>
@@ -344,7 +375,7 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
                   </div>
                   <div className="tile-body">
                     <div className="n ellipsis" title={f.name}>{f.name}</div>
-                    <div className="row" style={{ gap: 5 }}><GroupBadge group={f.group_name} />{f.dup_count > 1 && <span className="badge warn">{f.dup_count}×</span>}<ReviewBadge status={f.review_status} /></div>
+                    <div className="row" style={{ gap: 5 }}><GroupBadge group={f.group_name} />{f.dup_count > 1 && <span className="badge warn">{f.dup_count}×</span>}{f.online_only ? <OnlineBadge small /> : <ReviewBadge status={f.review_status} />}</div>
                     <div className="faint ellipsis" style={{ fontSize: 11 }}>{f.category} · {fmtDate(f.mtime)}</div>
                   </div>
                 </div>

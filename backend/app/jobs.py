@@ -73,16 +73,32 @@ def start(kind: str, fn: Callable[[Job, dict], dict | None], params: dict | None
                 _running.pop(kind, None)
                 _cancel.discard(job_id)
             db.audit(f"job.{kind}.{status}", {"job_id": job_id, **job.stats})
+            warm_caches()
 
     threading.Thread(target=runner, name=f"job-{kind}-{job_id}", daemon=True).start()
     return job_id
+
+
+def warm_caches() -> None:
+    """Teure Auswertungen nach einem Job im Hintergrund vorberechnen – die Oberfläche bekommt sie dann sofort."""
+    def work():
+        try:
+            from .api import files, pipeline
+            db.cached("stats", pipeline._stats, max_age=0)
+            db.cached("facets", files._facets, max_age=0)
+            pipeline.proposal_tree(False, None)
+        except Exception:
+            log.exception("Vorberechnung fehlgeschlagen")
+    threading.Thread(target=work, name="warm-caches", daemon=True).start()
 
 
 def cancel(job_id: int) -> None:
     _cancel.add(job_id)
 
 
-def recover_stale() -> None:
-    """Nach Neustart hängende Jobs als abgebrochen markieren."""
+def recover_stale() -> list[dict]:
+    """Nach Neustart hängende Jobs als abgebrochen markieren. -> die betroffenen Jobs (zum Fortsetzen)"""
+    stale = db.query("SELECT id, kind, params FROM jobs WHERE status='läuft'")
     with db.tx() as c:
-        c.execute("UPDATE jobs SET status='abgebrochen', message='Server neu gestartet' WHERE status='läuft'")
+        c.execute("UPDATE jobs SET status='abgebrochen', message='Server neu gestartet – wird fortgesetzt' WHERE status='läuft'")
+    return stale

@@ -60,6 +60,20 @@ python -m app.agent_client --server http://BUERO-PC:8800 --computer laptop --key
 
 Der Agent liest nur, sendet Metadaten, Textauszüge, Hashes und Miniaturen an den Server, meldet das Programm-Inventar und führt freigegebene Kopien **lokal** in seinen Cloud-Sync-Ordner aus (`watch` = dauerhaft, alle 10 Min.). Für den Netzbetrieb `server.api_key` setzen (oder `FDV_API_KEY`).
 
+## Große Bestände, Cloud-Platzhalter, Kosten
+
+**Cloud-Dateien „nur online“:** OneDrive, Google Drive, iCloud, Dropbox und Nextcloud legen für Dateien, die nur in der Cloud liegen, Platzhalter an. Die App erkennt sie allein über die Dateiattribute (Windows: `RECALL_ON_DATA_ACCESS`/`OFFLINE`, macOS: `SF_DATALESS`, iCloud `.icloud`, Nextcloud `.nextcloud`) und **liest ihren Inhalt nie** – kein Text, kein Hash, keine Miniatur, keine Kopie. Eingeordnet werden sie über Name, Pfad und Metadaten; sie tragen das Label „Nur online“ und lassen sich im Explorer filtern. Herunterladen nur auf ausdrücklichen Wunsch (Einstellungen, Kopier-Seite oder „Trotzdem herunterladen“ in der Detailansicht).
+
+**Miniaturen-Strategie** (`analysis.thumbnails_mode`): `smart` (Standard) erzeugt für alle Dateien das Deckblatt und **alle Seiten sofort nur für wichtige Dateien** (Wichtigkeit ≥ 50); der Rest wird beim ersten Öffnen nachgeladen. `thumbs_budget_gb` begrenzt den Cache – bei Überschreitung werden zuerst Folgeseiten unwichtiger Dateien aus dem Cache entfernt (nie Nutzerdateien).
+
+**Tempo:** Duplikate werden in drei Stufen gesucht (gleiche Größe → Schnell-Prüfsumme über 2 MB → SHA-256), die Suche nutzt einen Volltextindex (SQLite FTS5), Übersicht/Filterwerte werden zwischengespeichert und nach jedem Job vorberechnet. Eine abgebrochene Analyse wird nach einem Neustart **automatisch fortgesetzt**. Lasttest: `python scripts/benchmark.py --files 20000 --rows 500000` (Messwerte im Container: Einlesen ≈ 4.700 Dateien/s, Analyse offline ≈ 180 Dateien/s, Liste/Suche bei 500.000 Dateien 70–1.400 ms, zwischengespeicherte Auswertungen < 10 ms).
+
+**Claude-Kosten:** Vor jeder Analyse mit Claude erscheint eine **Kostenschätzung mit Bestätigung** (Obergrenze, inkl. Vergleich Opus/Sonnet/Haiku). Optionen:
+- **Nur unklare Dateien** (`llm.mode: unklare`): Was die Offline-Regeln sicher einordnen, kostet nichts.
+- **Batch** (`llm.batch: true`): Anthropic Message Batches, 50 % günstiger, Ergebnis meist innerhalb einer Stunde; laufende Batches überstehen Neustarts.
+- **Kostenlimit je Lauf** (`llm.max_cost_usd`): danach werden die restlichen Dateien offline eingeordnet.
+Tatsächlich verbrauchte Tokens und Kosten werden je Aufruf gespeichert und in Übersicht und Einstellungen angezeigt. Preise (USD je 1 Mio. Tokens) stehen in `backend/app/config.py` und lassen sich unter `llm.prices` überschreiben.
+
 ## LLM
 
 In *Einstellungen* wählbar:

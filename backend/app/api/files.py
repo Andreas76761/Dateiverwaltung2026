@@ -24,15 +24,14 @@ SORTS = {
 
 
 def _filters(q, computer, volume, group, category, label, file_type, ext, review, dup, date_from, date_to,
-             folder, status, min_importance, include_missing):
+             folder, status, min_importance, include_missing, online=None):
     where, args = ["1=1"], []
     if not include_missing:
         where.append("f.missing=0")
-    if q:
-        like = f"%{q}%"
-        where.append("(f.name LIKE ? OR f.rel_path LIKE ? OR f.summary LIKE ? OR f.text_excerpt LIKE ? OR f.ocr_text LIKE ?"
-                     " OR EXISTS (SELECT 1 FROM labels l WHERE l.file_id=f.id AND l.label LIKE ?))")
-        args += [like] * 6
+    if q and db.fts_query(q):
+        # Volltextindex (FTS5): Name, Pfad, Zusammenfassung, Inhalt, OCR-Text, Labels – Wortanfänge genügen
+        where.append("f.id IN (SELECT rowid FROM files_fts WHERE files_fts MATCH ?)")
+        args.append(db.fts_query(q))
     for col, val in (("f.computer_id", computer), ("f.volume_id", volume), ("f.group_name", group),
                      ("f.category", category), ("f.file_type", file_type), ("f.ext", ext),
                      ("f.review_status", review), ("f.status", status)):
@@ -59,6 +58,10 @@ def _filters(q, computer, volume, group, category, label, file_type, ext, review
     if folder:
         where.append("(f.rel_path LIKE ? ESCAPE '\\')")
         args.append(folder.replace("%", "\\%").replace("_", "\\_").rstrip("/") + "/%")
+    if online == "ja":
+        where.append("f.online_only=1")
+    elif online == "nein":
+        where.append("f.online_only=0")
     if min_importance:
         where.append("f.importance>=?")
         args.append(min_importance)
@@ -67,7 +70,7 @@ def _filters(q, computer, volume, group, category, label, file_type, ext, review
 
 LIST_COLS = """f.id, f.computer_id, f.volume_id, f.path, f.rel_path, f.name, f.ext, f.file_type, f.size, f.mtime, f.ctime,
   f.page_count, f.summary, f.category, f.group_name, f.confidence, f.importance, f.suggested_path, f.final_path,
-  f.review_status, f.dup_count, f.is_primary, f.status, f.pinned, f.missing,
+  f.review_status, f.dup_count, f.is_primary, f.status, f.pinned, f.missing, f.online_only, f.thumbs_complete,
   (SELECT group_concat(label, '|') FROM labels l WHERE l.file_id=f.id) labels,
   (SELECT COUNT(*) FROM thumbnails t WHERE t.file_id=f.id) thumbs,
   (SELECT group_concat(COALESCE(t.label, ''), '|') FROM thumbnails t WHERE t.file_id=f.id AND f.file_type IN ('Video', 'E-Mail')) thumb_labels,
@@ -86,15 +89,15 @@ def list_files(
     category: Optional[str] = None, label: Optional[str] = None, file_type: Optional[str] = None, ext: Optional[str] = None,
     review: Optional[str] = None, dup: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None,
     folder: Optional[str] = None, status: Optional[str] = None, min_importance: Optional[int] = None,
-    include_missing: bool = False, sort: str = "importance", order: str = "desc",
+    include_missing: bool = False, online: Optional[str] = None, sort: str = "importance", order: str = "desc",
     page: int = Query(1, ge=1), limit: int = Query(100, ge=1, le=1000),
 ):
     where, args = _filters(q, computer, volume, group, category, label, file_type, ext, review, dup, date_from, date_to,
-                           folder, status, min_importance, include_missing)
+                           folder, status, min_importance, include_missing, online)
     sort_sql = SORTS.get(sort, "f.importance")
     order_sql = "ASC" if order == "asc" else "DESC"
     base = "FROM files f JOIN computers c ON c.id=f.computer_id JOIN volumes v ON v.id=f.volume_id"
-    total = db.one(f"SELECT COUNT(*) n, COALESCE(SUM(f.size),0) bytes {base} WHERE {where}", args)
+    total = db.one(f"SELECT COUNT(*) n, COALESCE(SUM(f.size),0) bytes FROM files f WHERE {where}", args)
     rows = db.query(
         f"SELECT {LIST_COLS} {base} WHERE {where} ORDER BY f.pinned DESC, {sort_sql} {order_sql}, f.id LIMIT ? OFFSET ?",
         [*args, limit, (page - 1) * limit],
@@ -104,7 +107,11 @@ def list_files(
 
 @router.get("/facets")
 def facets(group: Optional[str] = None):
-    """Zählwerte für die Filterleiste."""
+    """Zählwerte für die Filterleiste (zwischengespeichert)."""
+    return db.cached("facets", _facets)
+
+
+def _facets():
     w = "missing=0"
     return {
         "groups": db.query(f"SELECT group_name value, COUNT(*) n FROM files WHERE {w} AND group_name IS NOT NULL GROUP BY 1 ORDER BY n DESC"),
@@ -118,23 +125,24 @@ def facets(group: Optional[str] = None):
 
 @router.get("/tree")
 def tree(volume: str, prefix: str = ""):
-    """Ordnerebene eines Volumes für den Explorer-Baum: Unterordner mit Anzahl/Größe."""
-    prefix = prefix.strip("/")
-    like = (prefix + "/%") if prefix else "%"
-    rows = db.query("SELECT rel_path, size FROM files WHERE volume_id=? AND missing=0 AND rel_path LIKE ?", (volume, like))
-    folders: dict[str, dict] = {}
-    files = 0
-    cut = len(prefix) + 1 if prefix else 0
-    for r in rows:
-        rest = r["rel_path"][cut:]
-        if "/" in rest:
-            name = rest.split("/", 1)[0]
-            f = folders.setdefault(name, {"name": name, "path": f"{prefix}/{name}".strip("/"), "count": 0, "size": 0})
-            f["count"] += 1
-            f["size"] += r["size"] or 0
-        else:
-            files += 1
-    return {"prefix": prefix, "folders": sorted(folders.values(), key=lambda x: x["name"].lower()), "files_here": files}
+    """Ordnerebene eines Volumes für den Explorer-Baum: Unterordner mit Anzahl/Größe.
+    Die Gruppierung läuft komplett in SQLite (schnell auch bei Millionen Dateien) und wird zwischengespeichert."""
+    return db.cached(f"tree:{volume}:{prefix.strip('/')}", lambda: _tree(volume, prefix.strip("/")), max_age=60)
+
+
+def _tree(volume: str, prefix: str):
+    start = len(prefix) + 2 if prefix else 1
+    like = (prefix.replace("%", "\\%").replace("_", "\\_") + "/%") if prefix else "%"
+    rows = db.query(
+        """SELECT CASE WHEN instr(rest, '/') > 0 THEN substr(rest, 1, instr(rest, '/') - 1) END AS name,
+                  COUNT(*) AS count, COALESCE(SUM(size), 0) AS size
+           FROM (SELECT substr(rel_path, ?) AS rest, size FROM files
+                 WHERE volume_id=? AND missing=0 AND rel_path LIKE ? ESCAPE '\\')
+           GROUP BY name""", (start, volume, like))
+    folders = [{"name": r["name"], "path": f"{prefix}/{r['name']}".strip("/"), "count": r["count"], "size": r["size"]}
+               for r in rows if r["name"] is not None]
+    files_here = next((r["count"] for r in rows if r["name"] is None), 0)
+    return {"prefix": prefix, "folders": sorted(folders, key=lambda x: x["name"].lower()), "files_here": files_here}
 
 
 @router.get("/files/{file_id}")
@@ -164,6 +172,27 @@ def thumb(file_id: int, page: int):
     return FileResponse(t["path"], media_type="image/jpeg", headers={"Cache-Control": "max-age=86400"})
 
 
+@router.post("/files/{file_id}/thumbs/ensure")
+def ensure_thumbs(file_id: int, download: bool = False):
+    """Alle Seiten erzeugen, wenn bisher nur das Deckblatt im Cache liegt (beim Öffnen einer Datei)."""
+    from ..skills import thumbcache, thumbnails
+
+    f = db.one("SELECT * FROM files WHERE id=?", (file_id,))
+    if not f:
+        raise HTTPException(404)
+    if f["thumbs_complete"]:
+        return {"pages": db.one("SELECT COUNT(*) n FROM thumbnails WHERE file_id=?", (file_id,))["n"], "complete": True}
+    local = {c["id"] for c in get_settings().computers if c["mode"] == "local"}
+    if f["computer_id"] not in local:
+        raise HTTPException(409, "Datei liegt auf einem Agent-Computer – Seiten erzeugt der Agent beim nächsten Scan")
+    if f["online_only"] and not (download or get_settings().cloud.get("download_online_only")):
+        raise HTTPException(409, "Nur online: Die Vorschau würde den Download aus der Cloud auslösen")
+    if not os.path.isfile(f["path"]) or not thumbnails.supports(f["ext"] or ""):
+        raise HTTPException(404, "Keine Vorschau möglich")
+    r = thumbcache.ensure_all(f)
+    return {**r, "complete": True}
+
+
 @router.get("/files/{file_id}/raw")
 def raw(file_id: int):
     """Original zum Ansehen öffnen (nur lesend, nur Dateien dieses Servers)."""
@@ -185,6 +214,7 @@ def add_label(file_id: int, body: LabelIn):
         raise HTTPException(400, "Label leer")
     with db.tx() as c:
         c.execute("INSERT OR REPLACE INTO labels(file_id, label, source) VALUES (?,?, 'nutzer')", (file_id, lbl))
+        db.fts_update(c, file_id)
     _rescore(file_id)
     return {"ok": True}
 
@@ -194,6 +224,7 @@ def remove_label(file_id: int, body: LabelIn):
     # entfernt nur die Metadaten-Zuordnung, keine Datei
     with db.tx() as c:
         c.execute("DELETE FROM labels WHERE file_id=? AND label=?", (file_id, body.label))
+        db.fts_update(c, file_id)
     _rescore(file_id)
     return {"ok": True}
 

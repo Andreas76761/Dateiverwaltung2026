@@ -15,3 +15,4 @@ class FileEntry:
     size: int
     mtime: str
     ctime: str
+    online_only: bool = False  # Cloud-Platzhalter: Inhalt liegt nur online → nie lesen

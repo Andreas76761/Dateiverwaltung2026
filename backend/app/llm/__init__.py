@@ -112,14 +112,16 @@ def reset() -> None:
     last_error = disabled = None
 
 
-def analyze(meta: dict, text: str) -> tuple[dict, str]:
-    """Analysiert mit dem konfigurierten Provider; fällt bei Fehlern auf Regeln zurück."""
+def analyze(meta: dict, text: str) -> tuple[dict, str, dict | None]:
+    """Analysiert mit dem konfigurierten Provider; fällt bei Fehlern auf Regeln zurück.
+    Rückgabe: (Ergebnis, Providername, Token-Verbrauch oder None)."""
     global last_error, disabled
     provider = get_provider()
     try:
         if disabled:
             raise FatalLLMError(disabled)
-        return normalize(provider.analyze(meta, text)), provider.name
+        result = normalize(provider.analyze(meta, text))
+        return result, provider.name, getattr(provider, "last_usage", None)
     except Exception as exc:
         last_error = f"{provider.name}: {exc}"
         if isinstance(exc, FatalLLMError) and not disabled:
@@ -127,7 +129,7 @@ def analyze(meta: dict, text: str) -> tuple[dict, str]:
         log.warning("LLM-Provider %s fehlgeschlagen (%s) – Fallback auf Regeln", provider.name, exc)
         from .rules_provider import RulesProvider
         rp = RulesProvider()
-        return normalize(rp.analyze(meta, text)), f"{rp.name} (Fallback)"
+        return normalize(rp.analyze(meta, text)), f"{rp.name} (Fallback)", None
 
 
 def test_connection(provider_name: str | None = None) -> dict:

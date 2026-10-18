@@ -38,7 +38,8 @@ def iso(ts: float) -> str:
 
 
 class Agent:
-    def __init__(self, server: str, computer: str, key: str, target: str | None, thumbs: bool):
+    def __init__(self, server: str, computer: str, key: str, target: str | None, thumbs: bool, download_online: bool = False):
+        self.download_online = download_online
         self.server = server.rstrip("/")
         self.computer = computer
         self.http = httpx.Client(base_url=self.server, headers={"X-API-Key": key} if key else {}, timeout=120)
@@ -71,6 +72,7 @@ class Agent:
                 yield p, os.path.relpath(p, root).replace("\\", "/"), fn, st
 
     def scan(self):
+        from .connectors.cloudfiles import is_online_only, real_name
         from .safety import sha256_file
         from .skills import extract, thumbnails
         from .skills.filetype import detect
@@ -98,12 +100,17 @@ class Agent:
                 batch.clear()
                 pending_thumbs.clear()
 
-            for path, rel, name, st in self.walk(root, excl_dirs, excl_ext):
+            for path, rel, raw_name, st in self.walk(root, excl_dirs, excl_ext):
+                name, _ = real_name(raw_name)
+                rel = rel[: len(rel) - len(raw_name)] + name
+                online = is_online_only(st, raw_name)
                 key = f"{vol['id']}|{rel}"
-                sig = f"{st.st_size}|{int(st.st_mtime)}"
-                e = {"path": path, "rel_path": rel, "name": name, "size": st.st_size,
+                sig = f"{st.st_size}|{int(st.st_mtime)}|{int(online)}"
+                e = {"path": path, "rel_path": rel, "name": name, "size": st.st_size, "online_only": online,
                      "mtime": iso(st.st_mtime), "ctime": iso(getattr(st, "st_birthtime", st.st_ctime))}
-                if self.state.get(key, {}).get("sig") == sig:
+                if online and not self.download_online:
+                    pass  # Cloud-Platzhalter: nur Metadaten – Lesen würde den Download auslösen
+                elif self.state.get(key, {}).get("sig") == sig:
                     e["sha256"] = self.state[key].get("sha")
                 else:
                     ext = detect(name)[0]
@@ -184,9 +191,11 @@ def main():
     ap.add_argument("--key", default=os.environ.get("FDV_API_KEY", ""))
     ap.add_argument("--target", help="Lokaler Cloud-Sync-Ordner für Schritt 4")
     ap.add_argument("--no-thumbs", action="store_true")
+    ap.add_argument("--download-online-only", action="store_true",
+                    help="Auch Cloud-Platzhalter (nur online) lesen – löst den Download aus!")
     ap.add_argument("commands", nargs="+", choices=["scan", "inventory", "copy", "watch"])
     a = ap.parse_args()
-    agent = Agent(a.server, a.computer, a.key, a.target, not a.no_thumbs)
+    agent = Agent(a.server, a.computer, a.key, a.target, not a.no_thumbs, a.download_online_only)
     agent.heartbeat()
     for cmd in a.commands:
         if cmd == "watch":

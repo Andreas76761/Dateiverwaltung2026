@@ -22,6 +22,25 @@ def client() -> anthropic.Anthropic:
         return _client
 
 
+def usage_of(message) -> dict:
+    u = message.usage
+    return {"input": u.input_tokens or 0, "output": u.output_tokens or 0,
+            "cache_read": getattr(u, "cache_read_input_tokens", 0) or 0,
+            "cache_write": getattr(u, "cache_creation_input_tokens", 0) or 0, "model": message.model}
+
+
+def request_params(model: str, meta: dict, text: str, max_chars: int, include_content: bool, batch: bool = False) -> dict:
+    """Gemeinsame Anfrage für Einzelaufruf und Batch (Batch: ohne Fallback-Beta, die dort nicht unterstützt wird)."""
+    params = {
+        "model": model,
+        "max_tokens": 2000,
+        "system": [{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
+        "output_config": {"effort": "low", "format": {"type": "json_schema", "schema": SCHEMA}},
+        "messages": [{"role": "user", "content": build_user_prompt(meta, text[:max_chars], include_content)}],
+    }
+    return params
+
+
 class AnthropicProvider:
     name = "anthropic"
 
@@ -39,14 +58,10 @@ class AnthropicProvider:
             raise FatalLLMError(f"Anthropic-Client nicht nutzbar: {exc}") from None
         try:
             response = c.beta.messages.create(
-                model=self.model,
-                max_tokens=2000,
+                **request_params(self.model, meta, text, self.max_chars, self.include_content),
                 # Bei einer Ablehnung durch Sicherheitsfilter automatisch auf ein passendes Modell ausweichen
                 betas=["server-side-fallback-2026-07-01"],
                 fallbacks="default",
-                system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
-                output_config={"effort": "low", "format": {"type": "json_schema", "schema": SCHEMA}},
-                messages=[{"role": "user", "content": build_user_prompt(meta, text[: self.max_chars], self.include_content)}],
             )
         except anthropic.AuthenticationError:
             raise FatalLLMError("API-Key fehlt oder ist ungültig (ANTHROPIC_API_KEY auf dem Server setzen)") from None
@@ -70,7 +85,6 @@ class AnthropicProvider:
         if response.stop_reason == "max_tokens":
             raise RuntimeError("Antwort abgeschnitten (max_tokens)")
         u = response.usage
-        self.last_usage = {"input": u.input_tokens, "output": u.output_tokens,
-                           "cache_read": getattr(u, "cache_read_input_tokens", 0) or 0, "model": response.model}
+        self.last_usage = usage_of(response)
         out = next(b.text for b in response.content if b.type == "text")
         return json.loads(out)

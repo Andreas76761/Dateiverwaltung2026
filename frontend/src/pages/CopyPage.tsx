@@ -9,6 +9,7 @@ export default function CopyPage({ go }: { go: (p: string) => void }) {
   const { jobs, running, refresh, version } = useJobs();
   const toast = useToast();
   const [inclDup, setInclDup] = useState(false);
+  const [dlOnline, setDlOnline] = useState(false);
   const [jobSel, setJobSel] = useState<number | null>(null);
   const preview = useAsync<any>(() => get(`/api/copy/preview${qs({ include_duplicates: inclDup })}`), [inclDup, version]);
   const copyJobs = jobs.filter((j) => j.kind === "copy");
@@ -20,7 +21,7 @@ export default function CopyPage({ go }: { go: (p: string) => void }) {
   const start = async (dry: boolean) => {
     if (!dry && !window.confirm(`${p?.n} Dateien (${fmtBytes(p?.bytes)}) werden nach\n${p?.target_root}\nkopiert. Originale bleiben unverändert. Fortfahren?`)) return;
     try {
-      const r = await post<{ job_id: number }>("/api/pipeline/copy", { include_duplicates: inclDup, dry_run: dry });
+      const r = await post<{ job_id: number }>("/api/pipeline/copy", { include_duplicates: inclDup, dry_run: dry, download_online_only: dlOnline });
       setJobSel(r.job_id);
       refresh();
       toast(dry ? "Trockenlauf gestartet" : "Kopiervorgang gestartet");
@@ -56,6 +57,12 @@ export default function CopyPage({ go }: { go: (p: string) => void }) {
               <div className="faint" style={{ fontSize: 12 }}>Ziel:</div>
               <div className="pathbox new">{p.target_root}</div>
               <label className="switch"><input type="checkbox" checked={inclDup} onChange={(e) => setInclDup(e.target.checked)} /> Auch überzählige Duplikate kopieren</label>
+              {p.online_only > 0 && (
+                <div className="callout" style={{ fontSize: 12.5, flexDirection: "column", gap: 6 }}>
+                  <span>☁ <b>{fmtNum(p.online_only)}</b> freigegebene Dateien ({fmtBytes(p.online_bytes)}) liegen nur online. Sie werden standardmäßig <b>übersprungen</b>, weil das Kopieren den Download auslöst.</span>
+                  <label className="switch"><input type="checkbox" checked={dlOnline} onChange={(e) => setDlOnline(e.target.checked)} /> Diese Dateien herunterladen und kopieren</label>
+                </div>
+              )}
               <div className="row">
                 <button className="btn primary" disabled={isRunning} onClick={() => start(false)}>{isRunning ? <Loader2 size={14} className="spin" /> : <CloudUpload size={15} />} Kopien erstellen</button>
                 <button className="btn" disabled={isRunning} onClick={() => start(true)}><FlaskConical size={14} /> Trockenlauf</button>
@@ -83,7 +90,7 @@ export default function CopyPage({ go }: { go: (p: string) => void }) {
               <div className="grid g4" style={{ gap: 10 }}>
                 <div className="card kpi" style={{ boxShadow: "none" }}><div className="k-label">Kopiert</div><div className="k-val" style={{ color: "var(--ok)" }}>{fmtNum(st.kopiert)}</div><div className="k-sub">{fmtBytes(st.bytes)}</div></div>
                 <div className="card kpi" style={{ boxShadow: "none" }}><div className="k-label">Übersprungen</div><div className="k-val">{fmtNum(st["übersprungen"])}</div><div className="k-sub">bereits identisch im Ziel</div></div>
-                <div className="card kpi" style={{ boxShadow: "none" }}><div className="k-label">An Agenten</div><div className="k-val">{fmtNum(st["an_agent_übergeben"])}</div><div className="k-sub">andere Computer</div></div>
+                <div className="card kpi" style={{ boxShadow: "none" }}><div className="k-label">An Agenten</div><div className="k-val">{fmtNum(st["an_agent_übergeben"])}</div><div className="k-sub">andere Computer{st.nur_online ? ` · ☁ ${fmtNum(st.nur_online)} nur online übersprungen` : ""}</div></div>
                 <div className="card kpi" style={{ boxShadow: "none" }}><div className="k-label">Fehler</div><div className="k-val" style={{ color: st.fehler ? "var(--bad)" : undefined }}>{fmtNum(st.fehler)}</div><div className="k-sub">{st.trockenlauf ? "Trockenlauf" : `von ${fmtNum(st.geplant)} geplant`}</div></div>
               </div>
               {groups.length > 0 && (

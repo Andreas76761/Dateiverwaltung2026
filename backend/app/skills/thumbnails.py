@@ -132,32 +132,51 @@ def _render_mail(path: str, out_dir: Path, max_pages: int) -> list[dict]:
     return res
 
 
-def render_to(path: str, ext: str, out_dir: Path, max_pages: int = 200, video_frames: int = 8) -> list[dict]:
-    """Alle Seiten/Standbilder einer Datei als JPEG in out_dir. Wird auch vom Agenten genutzt."""
+def _pdf_pages(pdf: str) -> int:
+    import pymupdf
+
+    with pymupdf.open(pdf) as doc:
+        return doc.page_count
+
+
+def render_to(path: str, ext: str, out_dir: Path, max_pages: int = 200, video_frames: int = 8) -> tuple[list[dict], int]:
+    """Seiten/Standbilder einer Datei als JPEG in out_dir (höchstens max_pages).
+    Rückgabe: (erzeugte Miniaturen, Gesamtzahl verfügbarer Seiten). Wird auch vom Agenten genutzt."""
     if ext == ".pdf":
-        return _render_pdf(path, out_dir, max_pages)
-    if ext in OFFICE_PAGED:
+        res, total = _render_pdf(path, out_dir, max_pages), _pdf_pages(path)
+    elif ext in OFFICE_PAGED:
         pdf = _office_to_pdf(path)
-        return _render_pdf(str(pdf), out_dir, max_pages, sheet=ext in SHEET_EXTS) if pdf else []
-    if ext in IMAGE_EXTS:
-        return _render_image(path, out_dir)
-    if ext in video.VIDEO_EXTS:
-        return video.frames(path, out_dir, THUMB_WIDTH, video_frames)
-    if ext in mail.MAIL_EXTS:
-        return _render_mail(path, out_dir, max_pages)
-    return []
+        if not pdf:
+            return [], 0
+        res, total = _render_pdf(str(pdf), out_dir, max_pages, sheet=ext in SHEET_EXTS), _pdf_pages(str(pdf))
+    elif ext in IMAGE_EXTS:
+        res = _render_image(path, out_dir)
+        total = len(res)
+    elif ext in video.VIDEO_EXTS:
+        dur = video.probe(path).get("duration") or 0
+        total = max(1, min(video_frames, int(dur // 2) or 1))
+        res = video.frames(path, out_dir, THUMB_WIDTH, min(total, max_pages))
+    elif ext in mail.MAIL_EXTS:
+        res = _render_mail(path, out_dir, max(max_pages, 50))  # Mails immer komplett (meist wenige Seiten)
+        total = len(res)
+    else:
+        return [], 0
+    for r in res:
+        r["bytes"] = Path(r["path"]).stat().st_size
+    return res, max(total, len(res))
 
 
-def generate(file_id: int, path: str, ext: str) -> list[dict]:
+def generate(file_id: int, path: str, ext: str, max_pages: int | None = None) -> tuple[list[dict], int]:
+    """Miniaturen in den Cache (data/thumbs/<id>) schreiben. max_pages=1 → nur Deckblatt."""
     s = get_settings()
     if not s.analysis.get("thumbnails", True):
-        return []
+        return [], 0
     out_dir = s.thumbs_dir / str(file_id)
     if out_dir.exists():
         shutil.rmtree(out_dir)  # nur eigener Cache im Datenverzeichnis
     out_dir.mkdir(parents=True)
-    return render_to(path, ext, out_dir, int(s.analysis.get("thumbnail_max_pages", 200)),
-                     int(s.analysis.get("video_frames", 8)))
+    limit = int(s.analysis.get("thumbnail_max_pages", 200))
+    return render_to(path, ext, out_dir, min(max_pages or limit, limit), int(s.analysis.get("video_frames", 8)))
 
 
 def supports(ext: str) -> bool:

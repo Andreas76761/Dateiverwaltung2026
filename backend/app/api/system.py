@@ -13,7 +13,8 @@ from .. import db
 from ..categories import as_dicts
 from ..config import get_settings
 from ..connectors import cloud
-from ..skills import list_skills, ocr
+from ..llm import costs
+from ..skills import list_skills, ocr, thumbcache
 
 router = APIRouter(prefix="/api", tags=["System"])
 
@@ -87,6 +88,9 @@ def settings():
     return {
         "llm": {**s.llm, "anthropic_key_present": bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))},
         "analysis": s.analysis,
+        "cloud": s.cloud,
+        "cache": thumbcache.usage(),
+        "llm_kosten": costs.totals(),
         "target_root": s.target_root,
         "target_structure": s.target_structure,
         "ocr_available": ocr.available(),
@@ -97,6 +101,12 @@ def settings():
 
 
 class SettingsIn(BaseModel):
+    mode: Optional[str] = None
+    batch: Optional[bool] = None
+    max_cost_usd: Optional[float] = None
+    thumbnails_mode: Optional[str] = None
+    thumbs_budget_gb: Optional[float] = None
+    download_online_only: Optional[bool] = None
     provider: Optional[str] = None
     anthropic_model: Optional[str] = None
     ollama_url: Optional[str] = None
@@ -120,6 +130,15 @@ def update_settings(body: SettingsIn):
         s.target_structure = upd.pop("target_structure")
     if "ocr" in upd:
         s.analysis["ocr"] = upd.pop("ocr")
+    if upd.get("mode") not in (None, "alle", "unklare"):
+        raise HTTPException(400, "mode: alle | unklare")
+    if upd.get("thumbnails_mode") not in (None, "smart", "alle", "bei_bedarf"):
+        raise HTTPException(400, "thumbnails_mode: smart | alle | bei_bedarf")
+    for k in ("thumbnails_mode", "thumbs_budget_gb"):
+        if k in upd:
+            s.analysis[k] = upd.pop(k)
+    if "download_online_only" in upd:
+        s.cloud["download_online_only"] = upd.pop("download_online_only")
     s.llm.update(upd)
     _persist_overrides()
     return settings()
@@ -139,7 +158,10 @@ def test_llm(body: TestLlmIn):
 def _persist_overrides():
     s = get_settings()
     p = s.data_dir / "overrides.json"
-    p.write_text(json.dumps({"llm": s.llm, "target_structure": s.target_structure, "ocr": s.analysis.get("ocr")},
+    p.write_text(json.dumps({"llm": s.llm, "target_structure": s.target_structure, "ocr": s.analysis.get("ocr"),
+                             "thumbnails_mode": s.analysis.get("thumbnails_mode"),
+                             "thumbs_budget_gb": s.analysis.get("thumbs_budget_gb"),
+                             "download_online_only": s.cloud.get("download_online_only")},
                             ensure_ascii=False, indent=2), encoding="utf-8")
 
 
@@ -153,6 +175,11 @@ def load_overrides():
             s.target_structure = d["target_structure"]
         if d.get("ocr") is not None:
             s.analysis["ocr"] = d["ocr"]
+        for k in ("thumbnails_mode", "thumbs_budget_gb"):
+            if d.get(k) is not None:
+                s.analysis[k] = d[k]
+        if d.get("download_online_only") is not None:
+            s.cloud["download_online_only"] = d["download_online_only"]
 
 
 @router.get("/audit")

@@ -72,6 +72,15 @@ export function Labels({ labels, max = 4, nowrap = false }: { labels: string[]; 
   );
 }
 
+export function OnlineBadge({ small }: { small?: boolean }) {
+  return (
+    <span className="badge g-beruf" style={small ? { fontSize: 10, padding: "0 6px" } : undefined}
+      title="Liegt nur in der Cloud (Platzhalter). Inhalt wird nicht gelesen, damit kein Download ausgelöst wird.">
+      ☁ nur online
+    </span>
+  );
+}
+
 export function ReviewBadge({ status }: { status: string }) {
   if (status === "freigegeben") return <span className="badge ok">freigegeben</span>;
   if (status === "abgelehnt") return <span className="badge bad">abgelehnt</span>;

@@ -28,7 +28,8 @@ def run(job: Job, params: dict) -> dict:
         ids = []
     files = db.query(f"SELECT *, COALESCE(final_path, suggested_path) target FROM files WHERE {where}", ids)
     dry = bool(params.get("dry_run"))
-    stats = {"geplant": len(files), "kopiert": 0, "übersprungen": 0, "fehler": 0, "an_agent_übergeben": 0,
+    allow_online = bool(params.get("download_online_only", s.cloud.get("download_online_only")))
+    stats = {"geplant": len(files), "kopiert": 0, "übersprungen": 0, "fehler": 0, "an_agent_übergeben": 0, "nur_online": 0,
              "bytes": 0, "trockenlauf": dry, "ziel": s.target_root}
     per_group: Counter = Counter()
     per_group_bytes: Counter = Counter()
@@ -38,7 +39,11 @@ def run(job: Job, params: dict) -> dict:
         if job.cancelled:
             break
         status, msg, dst, nbytes, verified = "geplant", "", f["target"], 0, 0
-        if dry:
+        if f["online_only"] and not allow_online:
+            # Kopieren würde den Download aus der Cloud auslösen → nur mit ausdrücklicher Erlaubnis
+            status, msg = "übersprungen", "Nur online – nicht heruntergeladen (in „Kopieren“ erlauben)"
+            stats["nur_online"] += 1
+        elif dry:
             status, msg = "geplant", "Trockenlauf – nichts kopiert"
             nbytes = f["size"] or 0
         elif f["computer_id"] not in local:

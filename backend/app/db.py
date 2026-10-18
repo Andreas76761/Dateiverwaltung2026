@@ -136,6 +136,24 @@ CREATE TABLE IF NOT EXISTS programs (
     UNIQUE(computer_id, name, kind, location)
 );
 
+CREATE TABLE IF NOT EXISTS llm_usage (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id INTEGER, file_id INTEGER, model TEXT,
+    input_tokens INTEGER DEFAULT 0, output_tokens INTEGER DEFAULT 0,
+    cache_read INTEGER DEFAULT 0, cache_write INTEGER DEFAULT 0,
+    batch INTEGER DEFAULT 0, cost_usd REAL DEFAULT 0, ts TEXT
+);
+
+CREATE TABLE IF NOT EXISTS llm_batches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_id TEXT NOT NULL,            -- Anthropic msgbatch_…
+    job_id INTEGER,
+    model TEXT,
+    file_ids TEXT,                     -- JSON-Liste
+    status TEXT DEFAULT 'läuft',       -- läuft | fertig | abgebrochen | fehler
+    created_at TEXT, finished_at TEXT, message TEXT
+);
+
 CREATE TABLE IF NOT EXISTS audit (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts TEXT, actor TEXT, action TEXT, detail TEXT
@@ -149,34 +167,78 @@ def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(get_settings().db_path, timeout=30, check_same_thread=False)
+_local = threading.local()
+_version = 0  # wird bei jedem Schreibvorgang erhöht (für Caches)
+
+
+def _open(path) -> sqlite3.Connection:
+    conn = sqlite3.connect(path, timeout=60, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")   # mit WAL sicher und deutlich schneller als FULL
     conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA cache_size=-65536")    # 64 MB Seiten-Cache
+    conn.execute("PRAGMA temp_store=MEMORY")
+    conn.execute("PRAGMA mmap_size=268435456")
+    return conn
+
+
+def connect() -> sqlite3.Connection:
+    """Eine Verbindung je Thread (statt je Abfrage) – wichtig für Tempo bei großen Beständen."""
+    path = str(get_settings().db_path)
+    conns = getattr(_local, "conns", None)
+    if conns is None:
+        conns = _local.conns = {}
+    conn = conns.get(path)
+    if conn is None:
+        conn = conns[path] = _open(path)
     return conn
 
 
 @contextmanager
 def tx() -> Iterator[sqlite3.Connection]:
+    """Schreib-Transaktion (verschachtelbar – committet wird nur auf der äußersten Ebene)."""
+    global _version
     with _lock:
         conn = connect()
+        depth = getattr(_local, "depth", 0)
+        _local.depth = depth + 1
         try:
             yield conn
-            conn.commit()
+            if depth == 0:
+                conn.commit()
+                _version += 1
         except Exception:
-            conn.rollback()
+            if depth == 0:
+                conn.rollback()
             raise
         finally:
-            conn.close()
+            _local.depth = depth
+
+
+def version() -> int:
+    return _version
 
 
 def query(sql: str, params: tuple | list | dict = ()) -> list[dict[str, Any]]:
-    conn = connect()
-    try:
-        return [dict(r) for r in conn.execute(sql, params).fetchall()]
-    finally:
-        conn.close()
+    return [dict(r) for r in connect().execute(sql, params).fetchall()]
+
+
+_cache: dict[str, tuple[int, float, Any]] = {}
+
+
+def cached(key: str, fn, max_age: float = 15.0):
+    """Ergebnis teurer Auswertungen (Statistik, Filterwerte, Vorschlagsbaum) wiederverwenden,
+    solange sich nichts geändert hat – bei laufenden Jobs höchstens max_age Sekunden alt."""
+    import time
+
+    hit = _cache.get(key)
+    now_t = time.monotonic()
+    if hit and (hit[0] == _version or now_t - hit[1] < max_age):
+        return hit[2]
+    val = fn()
+    _cache[key] = (_version, now_t, val)
+    return val
 
 
 def one(sql: str, params: tuple | list | dict = ()) -> dict[str, Any] | None:
@@ -194,7 +256,51 @@ def audit(action: str, detail: Any = None, actor: str = "system") -> None:
 
 MIGRATIONS = [
     "ALTER TABLE thumbnails ADD COLUMN label TEXT",
+    "ALTER TABLE thumbnails ADD COLUMN bytes INTEGER DEFAULT 0",
+    "ALTER TABLE files ADD COLUMN online_only INTEGER DEFAULT 0",
+    "ALTER TABLE files ADD COLUMN thumbs_complete INTEGER DEFAULT 0",
+    "ALTER TABLE files ADD COLUMN rules_confidence REAL",
+    "CREATE INDEX IF NOT EXISTS ix_files_status ON files(status, missing)",
+    "CREATE INDEX IF NOT EXISTS ix_files_size ON files(size)",
+    "CREATE INDEX IF NOT EXISTS ix_files_order_imp ON files(pinned DESC, importance DESC)",
+    "CREATE INDEX IF NOT EXISTS ix_files_order_mtime ON files(pinned DESC, mtime DESC)",
+    "CREATE INDEX IF NOT EXISTS ix_files_type ON files(file_type)",
+    "CREATE INDEX IF NOT EXISTS ix_files_missing_size ON files(missing, size)",  # schnelle Summen ohne Tabellenscan
+    "CREATE INDEX IF NOT EXISTS ix_files_quick ON files(quick_hash)",
+    "CREATE INDEX IF NOT EXISTS ix_files_review ON files(review_status)",
+    "CREATE INDEX IF NOT EXISTS ix_thumbs_file ON thumbnails(file_id)",
+    # Volltextsuche über Name, Pfad, Zusammenfassung, Inhalt, OCR und Labels (rowid = files.id)
+    "CREATE VIRTUAL TABLE IF NOT EXISTS files_fts USING fts5(name, path, body, tokenize='unicode61 remove_diacritics 2')",
 ]
+
+
+def fts_update(c, file_id: int) -> None:
+    """Suchindex einer Datei aktualisieren (nach Scan/Analyse/Label-Änderung)."""
+    r = c.execute("""SELECT f.name, f.rel_path, COALESCE(f.summary,'') || ' ' || COALESCE(f.category,'') || ' ' ||
+                     COALESCE(substr(f.text_excerpt,1,8000),'') || ' ' || COALESCE(substr(f.ocr_text,1,4000),'') || ' ' ||
+                     COALESCE((SELECT group_concat(label,' ') FROM labels WHERE file_id=f.id),'') AS body
+                     FROM files f WHERE f.id=?""", (file_id,)).fetchone()
+    c.execute("DELETE FROM files_fts WHERE rowid=?", (file_id,))  # nur Suchindex
+    if r:
+        c.execute("INSERT INTO files_fts(rowid, name, path, body) VALUES (?,?,?,?)", (file_id, r["name"], r["rel_path"], r["body"]))
+
+
+def fts_rebuild() -> int:
+    with tx() as c:
+        c.execute("DELETE FROM files_fts")
+        c.execute("""INSERT INTO files_fts(rowid, name, path, body)
+                     SELECT f.id, f.name, f.rel_path, COALESCE(f.summary,'') || ' ' || COALESCE(f.category,'') || ' ' ||
+                     COALESCE(substr(f.text_excerpt,1,8000),'') || ' ' || COALESCE(substr(f.ocr_text,1,4000),'') || ' ' ||
+                     COALESCE((SELECT group_concat(label,' ') FROM labels WHERE file_id=f.id),'') FROM files f""")
+        return c.execute("SELECT COUNT(*) FROM files_fts").fetchone()[0]
+
+
+def fts_query(q: str) -> str:
+    """Nutzereingabe → FTS5-Abfrage: jedes Wort als Präfix, alle Wörter müssen vorkommen."""
+    import re
+
+    words = [w for w in re.split(r"[^\w]+", q, flags=re.UNICODE) if w]
+    return " AND ".join(f'"{w}"*' for w in words)
 
 
 def init_db() -> None:
@@ -205,6 +311,10 @@ def init_db() -> None:
                 c.execute(m)
             except sqlite3.OperationalError:
                 pass  # Spalte existiert bereits
+        fts_empty = c.execute("SELECT COUNT(*) FROM files_fts").fetchone()[0] == 0
+        has_files = c.execute("SELECT COUNT(*) FROM files").fetchone()[0] > 0
+    if fts_empty and has_files:
+        fts_rebuild()  # Suchindex für bestehende Datenbanken einmalig aufbauen
     sync_config_to_db()
 
 

@@ -20,9 +20,17 @@ llm:
   ollama_url: http://localhost:11434
   ollama_model: llama3.1
   max_chars: 6000              # wie viel Text je Datei an das LLM geht
+  mode: unklare                # unklare = nur Dateien, die die Offline-Regeln nicht sicher einordnen | alle
+  hybrid_min_confidence: 0.6
+  batch: false                 # true = Anthropic Message Batches (−50 %, asynchron)
+  max_cost_usd: 25             # Kostenlimit je Analyse-Lauf (0 = kein Limit)
   send_content_to_cloud: false # Datenschutz: false = nur Metadaten + Dateiname an Cloud-LLMs
 
 analysis:
+  thumbnails_mode: smart        # smart = alle Seiten nur für wichtige Dateien, sonst Deckblatt | alle | bei_bedarf
+  thumbs_all_pages_min_importance: 50
+  thumbs_budget_gb: 20          # Obergrenze für Miniaturen + PDF-Cache
+  auto_resume: true             # unterbrochene Analyse nach Neustart fortsetzen
   ocr: true                    # Tesseract für Bilder & gescannte PDFs
   ocr_languages: deu+eng
   thumbnails: true
@@ -66,6 +74,12 @@ computers:
       - { id: mac-ssd, name: Macintosh HD, path: ./demo/mac/Users, kind: internal }
       - { id: usb-backup, name: USB-Backup-Platte, path: ./demo/usb-backup, kind: external }
       - { id: gdrive, name: Google Drive (Cloud), path: ./demo/cloud/GoogleDrive, kind: cloud }
+      - { id: nextcloud, name: Nextcloud (Cloud), path: ./demo/cloud/Nextcloud, kind: cloud }
+
+# Cloud-Dateien, die nur online liegen (Platzhalter von OneDrive/Google Drive/iCloud/Dropbox/Nextcloud)
+cloud:
+  download_online_only: false   # false = nur Metadaten, nichts herunterladen (empfohlen)
+  sparse_heuristic: false       # Linux/FUSE-Mounts (rclone): Größe > 0 ohne belegte Blöcke = nur online
 
 scan:
   exclude_dirs: [".git", "node_modules", "__pycache__", "$RECYCLE.BIN", "System Volume Information", ".Trash", "AppData/Local/Temp", ".cache", "venv", ".venv"]

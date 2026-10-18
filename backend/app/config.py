@@ -10,6 +10,14 @@ import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
+# USD je 1 Mio. Tokens (Anthropic-Listenpreise, Stand 10/2026). In config/fdv.yaml unter llm.prices überschreibbar.
+DEFAULT_PRICES = {
+    "claude-opus-5-5": {"input": 4.00, "output": 20.00, "cache_read": 0.20},
+    "claude-sonnet-5-5": {"input": 2.00, "output": 10.00, "cache_read": 0.20},
+    "claude-haiku-5-5": {"input": 0.10, "output": 0.50, "cache_read": 0.01},
+    "claude-fable-5-1": {"input": 10.00, "output": 50.00, "cache_read": 0.25},
+}
+
 
 def _resolve(p: str) -> str:
     path = Path(os.path.expanduser(p))
@@ -42,13 +50,32 @@ class Settings:
         if os.environ.get("FDV_LLM_PROVIDER"):
             self.llm["provider"] = os.environ["FDV_LLM_PROVIDER"]
 
+        self.llm.setdefault("mode", "alle")                 # alle | unklare (nur unsichere Dateien an das LLM)
+        self.llm.setdefault("hybrid_min_confidence", 0.6)  # ab dieser Regel-Sicherheit kein LLM-Aufruf
+        self.llm.setdefault("batch", False)                # Anthropic Message Batches (50 % günstiger, asynchron)
+        self.llm.setdefault("max_cost_usd", 25.0)          # Kostenlimit je Analyse-Lauf (0 = kein Limit)
+        self.llm.setdefault("confirm_above_usd", 0.0)      # ab diesem Schätzwert Bestätigung (0 = immer bei Cloud-LLM)
+        self.llm.setdefault("est_output_tokens", 450)      # Schätzung: JSON-Antwort + Denk-Tokens bei effort=low
+        self.llm.setdefault("usd_eur", 0.92)
+        self.llm["prices"] = {**DEFAULT_PRICES, **(self.llm.get("prices") or {})}
+
         self.analysis = {
             "ocr": True,
             "ocr_languages": "deu+eng",
             "thumbnails": True,
             "thumbnail_max_pages": 200,
-            "hash_max_mb": 2048,
+            "thumbnails_mode": "smart",          # smart | alle | bei_bedarf
+            "thumbs_all_pages_min_importance": 50,  # smart: ab dieser Wichtigkeit alle Seiten sofort
+            "thumbs_budget_gb": 20,              # Obergrenze für Miniaturen + PDF-Cache
+            "video_frames": 8,
+            "hash_max_mb": 4096,
+            "auto_resume": True,                 # abgebrochene Analyse nach Neustart fortsetzen
             **raw.get("analysis", {}),
+        }
+        self.cloud = {
+            "download_online_only": False,       # Nur-online-Dateien lesen/kopieren (löst Download aus!)
+            "sparse_heuristic": False,           # Linux/FUSE: Größe > 0 ohne Blöcke = online
+            **raw.get("cloud", {}),
         }
         tgt = raw.get("target", {})
         self.target_root = _resolve(tgt.get("root", "./data/target"))

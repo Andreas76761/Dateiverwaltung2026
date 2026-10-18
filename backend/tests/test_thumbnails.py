@@ -16,8 +16,11 @@ def thumbs(tmp_path, monkeypatch):
     monkeypatch.setenv("FDV_DATA_DIR", str(tmp_path / "data"))
     from app.config import get_settings
     get_settings.cache_clear()
+    from types import SimpleNamespace
+
     from app.skills import thumbnails
-    yield thumbnails
+    # generate() liefert (Miniaturen, Gesamtseiten) – die Tests prüfen die erzeugten Miniaturen
+    yield SimpleNamespace(generate=lambda *a, **k: thumbnails.generate(*a, **k)[0], THUMB_WIDTH=thumbnails.THUMB_WIDTH)
     get_settings.cache_clear()
 
 

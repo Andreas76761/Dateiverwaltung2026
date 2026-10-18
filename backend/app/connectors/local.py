@@ -8,6 +8,7 @@ from typing import Iterator
 
 from ..config import get_settings
 from . import FileEntry
+from .cloudfiles import is_online_only, real_name
 
 
 def _iso(ts: float) -> str:
@@ -44,15 +45,19 @@ def iter_files(root: str, errors: list[str] | None = None) -> Iterator[FileEntry
                 elif e.is_file(follow_symlinks=s.follow_symlinks):
                     if os.path.splitext(e.name)[1].lower() in s.exclude_ext or e.name.endswith(".fdv-partial"):
                         continue
+                    # stat() liest nur Metadaten – löst bei Cloud-Platzhaltern KEINEN Download aus
                     st = e.stat(follow_symlinks=s.follow_symlinks)
+                    name, _ = real_name(e.name)
                     rel = os.path.relpath(e.path, root_p).replace("\\", "/")
+                    rel = rel[: len(rel) - len(e.name)] + name
                     yield FileEntry(
                         path=e.path,
                         rel_path=rel,
-                        name=e.name,
+                        name=name,
                         size=st.st_size,
                         mtime=_iso(st.st_mtime),
                         ctime=_iso(getattr(st, "st_birthtime", st.st_ctime)),
+                        online_only=is_online_only(st, e.name, s.cloud["sparse_heuristic"]),
                     )
             except OSError as exc:
                 if errors is not None:

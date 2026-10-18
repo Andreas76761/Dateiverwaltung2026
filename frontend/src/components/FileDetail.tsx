@@ -17,7 +17,25 @@ export default function FileDetail({ id, onClose, onChanged }: { id: number; onC
   const [videoErr, setVideoErr] = useState(false);
   const toast = useToast();
 
-  const load = () => get<FD>(`/api/files/${id}`).then(setF).catch((e) => toast(e.message, true));
+  const [ensuring, setEnsuring] = useState(false);
+  const load = () => get<FD>(`/api/files/${id}`).then((d) => {
+    setF(d);
+    // Bisher nur Deckblatt im Cache → beim Öffnen alle Seiten erzeugen (nicht bei Nur-online-Dateien)
+    if (d && !d.thumbs_complete && d.thumbnails.length > 0 && !d.online_only && d.computer_id) ensure(d.id, false);
+  }).catch((e) => toast(e.message, true));
+  const ensure = async (fid: number, download: boolean) => {
+    setEnsuring(true);
+    try {
+      await post(`/api/files/${fid}/thumbs/ensure${download ? "?download=true" : ""}`);
+      const d = await get<FD>(`/api/files/${fid}`);
+      setF(d);
+      onChanged?.();
+    } catch (e: any) {
+      if (download) toast(e.message, true);
+    } finally {
+      setEnsuring(false);
+    }
+  };
   useEffect(() => {
     setF(undefined);
     setEditPath(null);
@@ -161,6 +179,16 @@ export default function FileDetail({ id, onClose, onChanged }: { id: number; onC
             <button className={tab === "duplikate" ? "on" : ""} onClick={() => setTab("duplikate")}>Duplikate ({f.duplicates.length})</button>
           </div>
           <div style={{ paddingTop: 10 }}>
+            {f.online_only ? (
+              <div className="callout" style={{ fontSize: 12.5, marginBottom: 10, flexDirection: "column", gap: 6 }}>
+                <span><b>☁ Nur online:</b> Diese Datei liegt nur in der Cloud. Inhalt, OCR und Vorschau wurden bewusst nicht gelesen,
+                  damit kein Download ausgelöst wird. Die Einordnung beruht auf Name, Pfad und Metadaten.</span>
+                <button className="btn sm" style={{ alignSelf: "flex-start" }} disabled={ensuring} onClick={() => ensure(f.id, true)}>
+                  {ensuring ? "Wird heruntergeladen …" : "Trotzdem herunterladen und Vorschau erzeugen"}
+                </button>
+              </div>
+            ) : null}
+            {ensuring && !f.online_only && <div className="faint" style={{ fontSize: 12, marginBottom: 8 }}>Weitere Seiten werden erzeugt …</div>}
             {tab === "seiten" && isVideo && f.missing === 0 && (
               videoErr ? (
                 <div className="callout warn" style={{ fontSize: 12.5, marginBottom: 10 }}>

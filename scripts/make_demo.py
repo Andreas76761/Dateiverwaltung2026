@@ -360,6 +360,16 @@ def main():
         html_body="<html><body><h1>KI-Update Oktober</h1><p>Diese Woche: <b>KI-Agenten</b> mit Tool Use, "
                   "<b>RAG</b> mit Vektor-Datenbanken und neue <b>LLM</b>-Modelle.</p><p>Viel Spaß beim Lesen!</p></body></html>")
 
+    # ---------- Nextcloud: Dateien, die nur online liegen (Platzhalter) ----------
+    nc = ROOT / "cloud/Nextcloud"
+    for name in ("Steuererklaerung_2024_ELSTER.pdf", "Familienfotos_2023.zip", "Projektplan_Phoenix_v3.pptx",
+                 "Arbeitsvertrag_Muster_AG.pdf"):
+        ph = nc / ("Dokumente" if "Foto" not in name else "Fotos") / f"{name}.nextcloud"
+        ph.parent.mkdir(parents=True, exist_ok=True)
+        ph.write_bytes(b"")  # virtuelle Datei: Inhalt liegt nur auf dem Server
+        stamp(ph, 2025, 3)
+    text(nc / "Dokumente/Notizen_lokal.md", "# Notizen\nDiese Datei ist lokal synchronisiert.", 2025)
+
     # ---------- Sonstiges ----------
     binary(lap / "Downloads/OllamaSetup.exe", 80_000, 2025, b"MZ")
     binary(pc_c / "Downloads/vlc-3.0.20-win64.msi", 60_000, 2024)

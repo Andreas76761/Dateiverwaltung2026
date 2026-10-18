@@ -10,7 +10,9 @@ from pydantic import BaseModel
 from .. import db, jobs
 from ..agents import analysis_agent, copy_agent, inventory_agent, organizer_agent, scan_agent
 from ..config import get_settings
+from ..llm import costs
 from ..safety import sanitize_rel
+from ..skills import thumbcache
 
 router = APIRouter(prefix="/api", tags=["Pipeline"])
 
@@ -22,10 +24,15 @@ class ScanIn(BaseModel):
 class AnalyzeIn(BaseModel):
     force: bool = False
     file_ids: list[int] = []
+    confirmed: bool = False             # Kosten bestätigt (bei Cloud-LLM Pflicht)
+    mode: Optional[str] = None          # alle | unklare
+    batch: Optional[bool] = None        # Anthropic Message Batches
+    max_cost_usd: Optional[float] = None
 
 
 class CopyIn(BaseModel):
     include_duplicates: bool = False
+    download_online_only: bool = False  # Nur-online-Dateien herunterladen und kopieren
     dry_run: bool = False
     file_ids: list[int] = []
 
@@ -35,9 +42,33 @@ def start_scan(body: ScanIn):
     return {"job_id": jobs.start("scan", scan_agent.run, body.model_dump())}
 
 
+def _estimate(body: "AnalyzeIn") -> dict:
+    from ..llm import costs
+
+    files, followers, in_batch = analysis_agent.select_files(body.model_dump())
+    est = costs.estimate(files, mode=body.mode, batch=body.batch)
+    est["duplikate_ohne_kosten"] = len(followers)
+    est["in_laufenden_batches"] = len(in_batch)
+    if body.max_cost_usd is not None:
+        est["limit_usd"] = body.max_cost_usd
+    return est
+
+
+@router.post("/llm/estimate")
+def llm_estimate(body: AnalyzeIn):
+    """Kostenschätzung für einen Analyse-Lauf mit dem Cloud-LLM (vor dem Start)."""
+    return _estimate(body)
+
+
 @router.post("/pipeline/analyze")
 def start_analyze(body: AnalyzeIn):
-    return {"job_id": jobs.start("analyze", analysis_agent.run, body.model_dump())}
+    s = get_settings()
+    if s.llm["provider"] == "anthropic" and not body.confirmed:
+        est = _estimate(body)
+        if est["an_llm"] and est["kosten_usd"] >= float(s.llm.get("confirm_above_usd", 0) or 0):
+            raise HTTPException(409, {"message": "Bitte Kosten bestätigen", "estimate": est})
+    params = {k: v for k, v in body.model_dump().items() if v is not None}
+    return {"job_id": jobs.start("analyze", analysis_agent.run, params)}
 
 
 @router.post("/pipeline/propose")
@@ -91,12 +122,17 @@ def cancel_job(job_id: int):
 
 @router.get("/stats")
 def stats():
+    return db.cached("stats", _stats)
+
+
+def _stats():
     w = "missing=0"
     t = db.one(f"""SELECT COUNT(*) files, COALESCE(SUM(size),0) bytes, SUM(status='analysiert') analyzed,
                    SUM(status='fehler') errors, SUM(dup_count>1 AND is_primary=0) dup_files,
                    COALESCE(SUM(CASE WHEN dup_count>1 AND is_primary=0 THEN size END),0) dup_bytes,
                    SUM(review_status='freigegeben') approved, SUM(review_status='abgelehnt') rejected,
-                   SUM(ocr_text IS NOT NULL) ocr, COUNT(DISTINCT dup_group) dup_groups
+                   SUM(ocr_text IS NOT NULL) ocr, COUNT(DISTINCT dup_group) dup_groups,
+                   SUM(online_only) online_only, COALESCE(SUM(CASE WHEN online_only=1 THEN size END),0) online_bytes
                    FROM files WHERE {w}""")
     return {
         "totals": t,
@@ -119,6 +155,8 @@ def stats():
         "copies": db.one("SELECT COUNT(*) ops, SUM(status='kopiert') copied, SUM(status='übersprungen') skipped, SUM(status='fehler') errors, SUM(status='geplant') planned, COALESCE(SUM(bytes),0) bytes FROM copy_ops"),
         "target_root": get_settings().target_root,
         "llm_provider": get_settings().llm["provider"],
+        "cache": thumbcache.usage(),
+        "llm_kosten": costs.totals(),
     }
 
 
@@ -126,7 +164,8 @@ def stats():
 
 @router.get("/proposal/tree")
 def proposal_tree(include_duplicates: bool = False, status: Optional[str] = None):
-    return organizer_agent.build_tree(only_primary=not include_duplicates, status=status)
+    return db.cached(f"ptree:{include_duplicates}:{status}",
+                     lambda: organizer_agent.build_tree(only_primary=not include_duplicates, status=status))
 
 
 @router.get("/proposal/files")
@@ -240,7 +279,8 @@ def copy_ops(job_id: Optional[int] = None, status: Optional[str] = None, limit: 
 @router.get("/copy/preview")
 def copy_preview(include_duplicates: bool = False):
     extra = "" if include_duplicates else " AND is_primary=1"
-    t = db.one(f"""SELECT COUNT(*) n, COALESCE(SUM(size),0) bytes FROM files
+    t = db.one(f"""SELECT COUNT(*) n, COALESCE(SUM(size),0) bytes, COALESCE(SUM(online_only),0) online_only,
+                   COALESCE(SUM(CASE WHEN online_only=1 THEN size END),0) online_bytes FROM files
                    WHERE review_status='freigegeben' AND missing=0{extra}""")
     groups = db.query(f"""SELECT group_name k, COUNT(*) n, COALESCE(SUM(size),0) bytes FROM files
                          WHERE review_status='freigegeben' AND missing=0{extra} GROUP BY 1""")
