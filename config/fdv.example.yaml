@@ -1,0 +1,81 @@
+# Future Dateiverwaltung – Beispielkonfiguration
+# Kopieren nach config/fdv.yaml und anpassen.
+#
+# Grundprinzip: Die App ist im Quellbereich STRENG READ-ONLY.
+# Es wird nie etwas gelöscht, verschoben oder umbenannt. Schreiben findet
+# ausschließlich in `target.root` (neuer Cloud-Ordner) statt – und erst nach
+# manueller Freigabe (Schritt 4).
+
+server:
+  host: 0.0.0.0
+  port: 8800
+  # API-Key für Agenten anderer Computer und das Frontend (leer = keine Prüfung, nur lokal sinnvoll)
+  api_key: ""
+  data_dir: ./data            # SQLite-DB, Miniaturen, Logs
+
+llm:
+  # anthropic | ollama | rules   (rules = offline, regelbasiert, immer verfügbar als Fallback)
+  provider: rules
+  anthropic_model: claude-opus-5-5
+  ollama_url: http://localhost:11434
+  ollama_model: llama3.1
+  max_chars: 6000              # wie viel Text je Datei an das LLM geht
+  send_content_to_cloud: false # Datenschutz: false = nur Metadaten + Dateiname an Cloud-LLMs
+
+analysis:
+  ocr: true                    # Tesseract für Bilder & gescannte PDFs
+  ocr_languages: deu+eng
+  thumbnails: true
+  thumbnail_max_pages: 200     # "alle Seiten" – Obergrenze zum Schutz vor Riesen-PDFs
+  hash_max_mb: 2048
+
+# Ziel für Schritt 4 – idealerweise ein synchronisierter Cloud-Ordner
+# (OneDrive / Google Drive for Desktop / Dropbox / Nextcloud).
+target:
+  root: ./demo/cloud/OneDrive/Future-Dateiverwaltung
+  structure: "{group}/{category}/{year}"   # Platzhalter: group, category, subcategory, year, month, type
+
+# 4 Computer, 6 Festplatten (4× System, 1× Daten-HDD, 1× USB-Backup) + 2 Cloud-Ordner. Für den Demo-Betrieb zeigen alle Pfade
+# auf ./demo. Auf echten Rechnern z.B. "C:/Users/andreas", "D:/", "/Volumes/Backup".
+computers:
+  - id: pc-buero
+    name: Büro-PC
+    os: Windows 11
+    mode: local                # local = dieser Server scannt selbst; agent = Agent auf dem Rechner pusht
+    volumes:
+      - { id: pc-buero-c, name: "C: System-SSD", path: ./demo/pc-buero/C, kind: internal }
+      - { id: pc-buero-d, name: "D: Daten-HDD", path: ./demo/pc-buero/D, kind: internal }
+  - id: laptop
+    name: Laptop
+    os: Windows 11
+    mode: local
+    volumes:
+      - { id: laptop-c, name: "C: SSD", path: ./demo/laptop/C, kind: internal }
+      - { id: laptop-onedrive, name: OneDrive (Cloud), path: ./demo/cloud/OneDrive/Dokumente, kind: cloud }
+  - id: workstation
+    name: GenAI-Workstation
+    os: Ubuntu 24.04
+    mode: local
+    volumes:
+      - { id: ws-nvme, name: NVMe /home, path: ./demo/workstation/home, kind: internal }
+  - id: mac
+    name: MacBook
+    os: macOS
+    mode: local
+    volumes:
+      - { id: mac-ssd, name: Macintosh HD, path: ./demo/mac/Users, kind: internal }
+      - { id: usb-backup, name: USB-Backup-Platte, path: ./demo/usb-backup, kind: external }
+      - { id: gdrive, name: Google Drive (Cloud), path: ./demo/cloud/GoogleDrive, kind: cloud }
+
+scan:
+  exclude_dirs: [".git", "node_modules", "__pycache__", "$RECYCLE.BIN", "System Volume Information", ".Trash", "AppData/Local/Temp", ".cache", "venv", ".venv"]
+  exclude_ext: [".tmp", ".lock", ".part", ".crdownload"]
+  follow_symlinks: false
+
+# Weitere Computer über Agenten anbinden (Beispiel):
+#  - id: nas
+#    name: NAS im Keller
+#    os: Linux
+#    mode: agent              # Agent auf diesem Gerät: python -m app.agent_client --server ... --computer nas scan inventory copy
+#    volumes:
+#      - { id: nas-daten, name: NAS Daten, path: /volume1/daten, kind: internal }

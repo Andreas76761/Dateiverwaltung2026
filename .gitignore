@@ -1,0 +1,8 @@
+data/
+demo/
+frontend/node_modules/
+frontend/dist/
+__pycache__/
+*.pyc
+config/fdv.yaml
+.pytest_cache/
