@@ -136,7 +136,7 @@ class Agent:
                     pages = thumbnails._render_image(path, Path(tmp))
                 else:
                     pdf = thumbnails._office_to_pdf(path)
-                    pages = thumbnails._render_pdf(str(pdf), Path(tmp), 200) if pdf else []
+                    pages = thumbnails._render_pdf(str(pdf), Path(tmp), 200, sheet=ext in thumbnails.SHEET_EXTS) if pdf else []
             except Exception as exc:
                 print("  ! Miniatur", path, exc)
                 return

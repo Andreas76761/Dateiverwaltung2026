@@ -73,23 +73,37 @@ def pptx(p: Path, title: str, slides: list[tuple[str, str]], y: int, color=(30, 
     stamp(p, y)
 
 
-def word(p: Path, title: str, paras: list[str], y: int):
+def word(p: Path, title: str, paras: list[str], y: int, pages: list[tuple[str, list[str]]] = ()):
+    """DOCX; weitere Seiten über (Überschrift, Absätze) mit Seitenumbruch."""
     p.parent.mkdir(parents=True, exist_ok=True)
     d = docx.Document()
     d.add_heading(title, 0)
     for t in paras:
         d.add_paragraph(t)
+    for heading, body in pages:
+        d.add_page_break()
+        d.add_heading(heading, 1)
+        for t in body:
+            d.add_paragraph(t)
     d.save(p)
     stamp(p, y)
 
 
-def xlsx(p: Path, title: str, rows: list[list], y: int):
+def xlsx(p: Path, title: str, rows: list[list], y: int, sheets: dict[str, list[list]] | None = None):
+    """XLSX; weitere Tabellenblätter werden beim Rendern zu weiteren Seiten."""
+    from openpyxl.styles import Font, PatternFill
     p.parent.mkdir(parents=True, exist_ok=True)
     wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = title[:30]
-    for r in rows:
-        ws.append(r)
+    for i, (name, data) in enumerate([(title, rows), *(sheets or {}).items()]):
+        ws = wb.active if i == 0 else wb.create_sheet()
+        ws.title = name[:30]
+        for r in data:
+            ws.append(r)
+        for c in ws[1]:
+            c.font = Font(bold=True, color="FFFFFF")
+            c.fill = PatternFill("solid", fgColor="4F46E5")
+        for col in ws.columns:
+            ws.column_dimensions[col[0].column_letter].width = 18
     wb.save(p)
     stamp(p, y)
 
@@ -206,7 +220,10 @@ def main():
         "Flug LH2034 München – Lissabon, 12.07.2025, Sitz 14A\nBuchungscode Q7XK2L. Hotel-Buchung über booking.com bestätigt."], 2025, 7)
     word(mac / "Documents/Lebenslauf_Andreas_2025.docx", "Lebenslauf", [
         "Andreas – Senior Consultant Supply Chain & GenAI", "Berufserfahrung: 2018–heute Head of SCM Digital, oneSCM-Einführung, GenAI-Programm.",
-        "Ausbildung: Master Wirtschaftsingenieurwesen, TU München.", "Zertifikate: PMP, AWS Machine Learning Specialty."], 2025)
+        "Ausbildung: Master Wirtschaftsingenieurwesen, TU München.", "Zertifikate: PMP, AWS Machine Learning Specialty."], 2025,
+        pages=[("Projekterfahrung", ["2023–2025: Einführung oneSCM Lieferantenportal in 4 Werken.", "2024: GenAI-Programm mit 12 Use Cases, RAG über Vertragsarchiv.",
+                                      "2021: Neuaufbau Disposition mit KI-Prognose."] * 3),
+               ("Kenntnisse & Sprachen", ["SAP, oneSCM, Python, SQL, Power BI, Claude/LLM-Agenten.", "Deutsch (Muttersprache), Englisch (verhandlungssicher)."])])
     dup(mac / "Documents/Lebenslauf_Andreas_2025.docx", gd / "Bewerbung/Lebenslauf_Andreas_2025.docx")
     scan_image(lap / "Pictures/Scans/IMG_20240518_beleg.jpg", [
         "QUITTUNG", "Autohaus Schmidt GmbH", "Inspektion & TÜV Fahrzeug M-AB 1234", "Betrag: 489,00 EUR", "Datum: 18.05.2024",
@@ -232,10 +249,16 @@ def main():
         "Laufzeit 36 Monate. Vertraulichkeit gemäß NDA vom 03.03.2024.\nGerichtsstand München.", "Unterschriften der Vertragsparteien."], 2024, 3)
     word(lap / "Documents/Projekt_Phoenix/Protokoll_JourFixe_2025-10-02.docx", "Protokoll Jour Fixe Projekt Phoenix", [
         "Teilnehmer: Andreas, M. Klein, S. Roth", "TOP 1: Status Meilensteine – Meilenstein 3 erreicht.",
-        "TOP 2: Risiken – Lieferengpass Halbleiter, Maßnahme: Zweitlieferant.", "Nächstes Meeting: 16.10.2025"], 2025)
+        "TOP 2: Risiken – Lieferengpass Halbleiter, Maßnahme: Zweitlieferant.", "Nächstes Meeting: 16.10.2025"], 2025,
+        pages=[("Anlage: Maßnahmenliste", [f"M{i:02d}: Maßnahme {i} – verantwortlich S. Roth – Frist KW {40 + i}" for i in range(1, 25)])])
     xlsx(pc_d / "Arbeit/Budget_2026_Planung.xlsx", "Budget 2026", [
         ["Kostenstelle", "Q1", "Q2", "Q3", "Q4"], ["SCM Digital", 120000, 115000, 130000, 140000],
-        ["GenAI Programm", 80000, 95000, 110000, 120000], ["Schulung", 15000, 12000, 10000, 18000]], 2025)
+        ["GenAI Programm", 80000, 95000, 110000, 120000], ["Schulung", 15000, 12000, 10000, 18000]], 2025,
+        sheets={"Personal": [["Rolle", "FTE", "Kosten/Jahr"], ["Data Scientist", 2, 180000], ["SCM Analyst", 3, 210000], ["Prompt Engineer", 1, 95000]],
+                "Lizenzen": [["Produkt", "Anzahl", "Preis"], ["oneSCM", 120, 54000], ["Claude Team", 40, 24000], ["Power BI", 60, 7200]]})
+    xlsx(pc_d / "Arbeit/Artikelliste_Lager_Sued.xlsx", "Artikel", [["Artikel", "Bestand", "Wert", "Lager"]] +
+         [[f"Artikel {i}", i, round(i * 1.19, 2), "Lager Süd"] for i in range(800)], 2026,
+         sheets={"Breit": [[f"Spalte {c}" for c in range(40)], list(range(40))]})
     pdf(pc_d / "Arbeit/Rechnungen/Rechnung_2025-0815_Nordwind.pdf", "Rechnung Nr. 2025-0815", [
         "Nordwind Logistik GmbH an Muster AG\nLeistungszeitraum August 2025\nNetto 18.400,00 EUR, USt 19 %, Brutto 21.896,00 EUR\nZahlbar bis 30.09.2025."], 2025, 8)
     text(ws / "projects/scm-forecast/forecast.py",

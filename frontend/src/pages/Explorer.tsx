@@ -5,7 +5,8 @@ import FileDetail from "../components/FileDetail";
 import { FileIcon, FileThumbOrIcon, GroupBadge, Importance, Labels, PageViewer, ReviewBadge, useAsync, useJobs } from "../components/ui";
 import type { Computer, FileItem, FileList } from "../types";
 
-const PREVIEW_EXTS = ".pdf,.pptx,.ppt,.png,.jpg,.jpeg";
+// Dateitypen mit Seitenvorschau (Office über LibreOffice → PDF → alle Seiten)
+const PREVIEW_EXTS = ".pdf,.pptx,.ppt,.ppsx,.odp,.docx,.doc,.odt,.rtf,.xlsx,.xls,.xlsm,.ods,.png,.jpg,.jpeg";
 import { fmtBytes, fmtDate, fmtNum, GROUPS } from "../util";
 
 interface Facets {
@@ -234,12 +235,12 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
           <div className="seg">
             <button className={view === "list" ? "on" : ""} onClick={() => setView("list")}><List size={14} /> Liste</button>
             <button className={view === "grid" ? "on" : ""} onClick={() => setView("grid")}><LayoutGrid size={14} /> Galerie</button>
-            <button className={view === "pages" ? "on" : ""} onClick={() => { setView("pages"); setPreviewOnly(true); }} title="Alle Seiten von PDF, PPTX, PNG, JPEG als Miniaturen"><GalleryHorizontal size={14} /> Seiten</button>
+            <button className={view === "pages" ? "on" : ""} onClick={() => { setView("pages"); setPreviewOnly(true); }} title="Alle Seiten von PDF, PPTX, DOCX, XLSX, PNG, JPEG als Miniaturen"><GalleryHorizontal size={14} /> Seiten</button>
           </div>
         </div>
         <div className="filterbar">
-          <button className={`chip ${previewOnly ? "on" : ""}`} onClick={() => setPreviewOnly(!previewOnly)} title="Nur PDF, PPTX, PNG und JPEG">
-            <Images size={12} /> PDF · PPTX · PNG · JPEG
+          <button className={`chip ${previewOnly ? "on" : ""}`} onClick={() => setPreviewOnly(!previewOnly)} title="Nur Dateien mit Seitenvorschau: PDF, PPTX, DOCX, XLSX, PNG, JPEG">
+            <Images size={12} /> PDF · PPTX · DOCX · XLSX · PNG · JPEG
           </button>
           {GROUPS.map((g) => (
             <button key={g} className={`chip ${group === g ? "on" : ""}`} onClick={() => setGroup(group === g ? "" : g)}>

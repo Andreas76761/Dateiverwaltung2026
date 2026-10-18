@@ -44,8 +44,8 @@ def analyze_file(f: dict, local: bool) -> dict:
                         [(f["id"], t["page"], t["path"], t["width"], t["height"]) for t in thumbs],
                     )
                 stat["miniaturen"] = len(thumbs)
-                if pages is None and thumbs and f["ext"] != ".pdf" and f["file_type"] != "Bild":
-                    pages = len(thumbs)
+                if thumbs and f["ext"] in thumbnails.OFFICE_PAGED:
+                    pages = len(thumbs)  # gedruckte Seiten (bei XLSX sonst nur Anzahl der Blätter)
             except Exception as exc:
                 err = (err + "; " if err else "") + f"Miniatur: {exc}"
 
