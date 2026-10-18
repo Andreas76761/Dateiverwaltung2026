@@ -193,6 +193,13 @@ Ist der Key ungültig oder das Modell nicht verfügbar, bricht die App die LLM-A
 
 Identische Dateien (gleicher SHA-256) werden nur **einmal** analysiert – die Duplikate übernehmen das Ergebnis.
 
+**Offline-Einordnung ohne LLM** (Regeln, immer verfügbar):
+- **Dokumentart schlägt Thema:** Was eine Datei *ist* (Lebenslauf, Ausweis, Protokoll, Police, Kontoauszug …), steht meist im Namen und entscheidet – ein Lebenslauf voller Supply-Chain-Begriffe bleibt eine Bewerbungsunterlage; bei Fotos, Audio und Video zählt ein sprechender Name mehr als die Endung („Sprachmemo_Termin_Steuerberater.m4a“ → Steuern).
+- **Ordner-Kontext:** Unsichere Einordnungen übernehmen die Kategorie sicher eingeordneter Nachbarn im selben Ordner („Steuer/2023/scan0001.pdf“).
+- **Lernen aus Korrekturen:** Eine manuell geänderte Kategorie zählt im Ordner wie drei sichere Nachbarn und gleicht unsichere Dateien daneben an; sie bleibt auch bei erneuter Analyse erhalten.
+- **Ehrliche Sicherheit:** berechnet aus dem Abstand zur zweitbesten Kategorie – knappe Fälle gelten als unsicher und gehen im Modus „unklare“ an das LLM.
+- **Messbar:** `cd backend && python ../scripts/regeln_bewerten.py` zeigt die Trefferquote auf dem Prüfsatz `tests/data/einordnung.yaml` (Fälle aus Probeläufen dort ergänzen); der Kontrollsatz `einordnung_kontrolle.yaml` wird nie zum Abstimmen benutzt. Stand: Kontrollsatz 88 % (vorher 78 %).
+
 ## Architektur
 
 ```

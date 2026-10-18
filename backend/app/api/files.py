@@ -336,6 +336,10 @@ def update_file(file_id: int, body: PatchIn):
         if body.review_status in ("offen", "freigegeben", "abgelehnt"):
             c.execute("UPDATE files SET review_status=? WHERE id=?", (body.review_status, file_id))
     _rescore(file_id)
+    if body.category:  # aus der Korrektur lernen: unsichere Nachbarn im selben Ordner angleichen
+        from ..agents import context_agent
+        rel = f["rel_path"]
+        context_agent.apply(f["volume_id"], rel.rsplit("/", 1)[0] if "/" in rel else "")
     return file_detail(file_id)
 
 

@@ -38,6 +38,56 @@ def keyword_hits(hay: str) -> dict[str, int]:
 
 META_LINE = re.compile(r"^\[(?:raw-foto|iphone-/heic-foto|foto) · [^\]]*\]\s*")
 
+# Dokumentart schlägt Thema: Was ein Dokument IST (Lebenslauf, Ausweis, Protokoll …), steht meist im Dateinamen
+# und entscheidet über die Kategorie – auch wenn der Text voller Fachbegriffe eines anderen Themas ist
+# (ein Lebenslauf über Supply Chain ist trotzdem eine Bewerbungsunterlage).
+DOC_TYPES: dict[str, tuple[str, ...]] = {
+    "b_personal": ("lebenslauf", "cv", "bewerbung", "anschreiben", "arbeitszeugnis", "zwischenzeugnis", "gehaltsabrechnung",
+                   "lohnabrechnung", "entgeltabrechnung", "arbeitsvertrag", "resume", "curriculum"),
+    "p_behoerden": ("personalausweis", "ausweis", "reisepass", "geburtsurkunde", "heiratsurkunde", "sterbeurkunde",
+                    "meldebescheinigung", "führungszeugnis", "fuehrungszeugnis", "aufenthaltstitel", "rentenbescheid"),
+    "p_gesundheit": ("impfpass", "impfausweis", "arztbrief", "befund", "attest", "arbeitsunfähigkeit", "au-bescheinigung",
+                     "heilmittelverordnung", "überweisungsschein", "krankenhausbericht", "entlassbrief"),
+    "p_steuern": ("steuerbescheid", "steuererklärung", "steuererklaerung", "lohnsteuerbescheinigung", "einkommensteuer",
+                  "steuerberater", "est_", "elster", "finanzamt", "grundsteuer"),
+    "p_finanzen": ("kontoauszug", "depotauszug", "kreditvertrag", "darlehensvertrag", "jahressteuerbescheinigung"),
+    "p_versicherung": ("police", "versicherungsschein", "schadenmeldung", "schadensmeldung", "beitragsrechnung"),
+    "p_wohnen": ("mietvertrag", "nebenkostenabrechnung", "betriebskostenabrechnung", "stromrechnung", "heizkostenabrechnung",
+                 "übergabeprotokoll", "wohnungsgeberbestätigung"),
+    "p_auto": ("fahrzeugschein", "fahrzeugbrief", "zulassungsbescheinigung", "tüv", "tuev", "hauptuntersuchung", "inspektion"),
+    "p_vertraege": ("kündigung", "kuendigung", "handyvertrag", "mobilfunkvertrag"),
+    "p_bildung": ("zeugnis", "abiturzeugnis", "masterurkunde", "bachelorurkunde", "diplom", "notenspiegel", "transcript"),
+    "p_reisen": ("boarding", "bordkarte", "flugticket", "bahnticket", "hotelbuchung", "reisebestätigung", "visum"),
+    "p_garantie": ("garantie", "garantieschein", "bedienungsanleitung", "gebrauchsanweisung", "handbuch"),
+    "p_rechnungen": ("quittung", "kassenbon", "kassenbeleg"),
+    "b_meetings": ("protokoll", "agenda", "tagesordnung", "jourfixe", "jour fixe", "aufzeichnung", "besprechung", "meeting"),
+    "b_vertraege": ("rahmenvertrag", "nda", "geheimhaltungsvereinbarung", "dienstleistungsvertrag", "avv", "lizenzvertrag"),
+    "b_angebote": ("angebot", "kostenvoranschlag", "auftragsbestätigung", "bestellung", "purchase order"),
+    "b_rechnungen": ("invoice", "gutschrift", "mahnung"),
+    "b_schulung": ("zertifikat", "teilnahmebestätigung", "teilnahmebescheinigung", "certificate"),
+    "b_berichte": ("jahresbericht", "monatsbericht", "quartalsbericht", "report"),
+    "g_medien": ("comfyui", "midjourney", "dall-e", "dalle", "stable diffusion", "sdxl"),
+    "s_backups": ("backup", "sicherung", "datensicherung"),
+}
+_DT_INDEX: dict[str, list[str]] = {}
+for _cid, _words in DOC_TYPES.items():
+    for _w in _words:
+        _DT_INDEX.setdefault(_w, []).append(_cid)
+_DT_RX = re.compile(r"(?<![a-z0-9äöüß])(" + "|".join(sorted(map(re.escape, _DT_INDEX), key=len, reverse=True)) + r")(?![a-zäöüß])")
+# Ein „report“ von Hugging Face ist kein Geschäftsbericht – Dokumentart im Pfad zählt nur halb, im Text nur am Anfang (Titel)
+DT_NAME, DT_PATH, DT_TITLE = 7.0, 3.0, 2.0
+MEDIA_TYPES = ("Bild", "Video", "Audio")
+MAIL_REPLY = re.compile(r"^(aw|wg|re|fw|fwd|antw)[\s:_-]", re.I)
+
+
+def doc_type_hits(name: str, folder: str, title: str) -> dict[str, float]:
+    scores: dict[str, float] = {}
+    for hay, w in ((name, DT_NAME), (folder, DT_PATH), (title, DT_TITLE)):
+        for m in _DT_RX.finditer(hay.replace("_", " ").replace("-", " ") if hay is not name else re.sub(r"[_\-.]", " ", hay)):
+            for cid in _DT_INDEX[m.group(1)]:
+                scores[cid] = max(scores.get(cid, 0.0), 0.0) + w
+    return scores
+
 
 class RulesProvider:
     name = "regeln"
@@ -45,6 +95,7 @@ class RulesProvider:
     def analyze(self, meta: dict, text: str) -> dict:
         name = meta["name"].lower()
         path = meta["path"].lower().replace("\\", "/")
+        folder = path.rsplit("/", 1)[0] if "/" in path else ""
         ext = (meta.get("ext") or "").lower()
         hay_name = f"{name} {path}"
         hay_text = text[:12000].lower()
@@ -52,20 +103,29 @@ class RulesProvider:
         name_hits = keyword_hits(hay_name)
         text_hits = keyword_hits(hay_text) if hay_text else {}
         # Foto-Metadaten (Aufnahmedatum, Kamera) sind kein Dokumenttext – zählen nicht als „Bild mit viel Text“
-        content_len = len(META_LINE.sub("", hay_text, count=1))
+        content = META_LINE.sub("", hay_text, count=1)
+        content_len = len(content)
+        dtype = doc_type_hits(name, folder, content[:160])
+        media = meta.get("file_type") in MEDIA_TYPES
+        # Medien mit sprechendem Namen (z. B. „Sprachmemo_Termin_Steuerberater.m4a“, „Personalausweis.jpg“):
+        # der Name sagt mehr als die Endung
+        topical_name = any(cid not in ("p_fotos", "p_videos", "p_musik") for kw in name_hits for cid in _KW_CATS[kw]) or bool(dtype)
         scores: dict[str, float] = {}
         for c in CATEGORIES:
             s = 0.0
             if ext and ext in c.exts:
-                # Bild mit OCR-Text (z. B. gescannter Beleg) oder Video mit Titel → Inhalt zählt mehr als die Endung
-                s += 1.0 if (meta.get("file_type") in ("Bild", "Video") and content_len > 80) else 3.0
+                weak = media and (content_len > 80 or topical_name)
+                s += 1.0 if weak else 3.0
             for kw in c.keywords:
                 if kw in name_hits:
                     s += 2.5
                 if kw in text_hits:
                     s += min(text_hits[kw], 5) * 0.6
-            if c.id == "p_fotos" and meta.get("file_type") == "Bild" and content_len > 80:
-                s *= 0.4  # Bild mit viel Text ist eher ein gescanntes Dokument
+            s += dtype.get(c.id, 0.0)
+            if c.id == "b_kunden" and ext in (".eml", ".msg") and MAIL_REPLY.match(name):
+                s += 2.0  # „AW: …“ / „WG: …“ – geschäftliche Korrespondenz
+            if c.id == "p_fotos" and meta.get("file_type") == "Bild" and (content_len > 80 or dtype):
+                s *= 0.4  # Bild mit viel Text oder Dokumentnamen ist eher ein gescanntes Dokument
             if s:
                 scores[c.id] = s
 
@@ -77,9 +137,14 @@ class RulesProvider:
                         scores[cid] *= 1.4
 
         if scores:
+            ranked = sorted(scores.values(), reverse=True)
             best = max(scores, key=scores.get)
-            total = sum(scores.values())
-            conf = round(min(0.95, 0.35 + scores[best] / (total + 3)), 2)
+            top, second = ranked[0], (ranked[1] if len(ranked) > 1 else 0.0)
+            # Sicherheit aus dem Vorsprung vor der zweitbesten Kategorie – knappe Entscheidungen gelten als unsicher
+            # (gehen im Modus „unklare“ an das LLM); wenig Belege insgesamt ebenfalls
+            margin = (top - second) / top
+            conf = 0.35 + 0.6 * margin * min(1.0, top / 6)
+            conf = round(min(0.95, max(0.25, conf)), 2)
         else:
             best, conf = "s_unbekannt", 0.2
         cat = BY_ID[best]

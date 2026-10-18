@@ -78,6 +78,10 @@ def finalize(f: dict, ctx: dict, result: dict, provider: str, rules_conf: float 
     """Ergebnis speichern: Kategorie, Labels, Wichtigkeit, Pfad, Miniaturen."""
     stat = {"miniaturen": 0}
     cat = BY_ID[result["category_id"]]
+    if db.one("SELECT 1 FROM labels WHERE file_id=? AND label='manuell geprüft' AND source='nutzer'", (f["id"],)) and f.get("category"):
+        cat = find_category(f["category"])  # manuelle Korrektur bleibt auch bei erneuter Analyse erhalten
+        result = {**result, "category_id": cat.id, "confidence": 1.0, "subfolder": ""}
+        provider = f"{provider} · Kategorie manuell"
     labels = set(result["labels"]) | rule_labels(f["name"], ctx["full"])
     mt = datetime.fromisoformat(f["mtime"]) if f.get("mtime") else datetime.now()
     year = guess_year(f["name"], ctx["full"], mt.year)
@@ -199,6 +203,8 @@ def copy_analysis(src_id: int, f: dict) -> None:
     src = db.one("SELECT * FROM files WHERE id=?", (src_id,))
     if not src or src["status"] != "analysiert":
         return
+    if db.one("SELECT 1 FROM labels WHERE file_id=? AND label='manuell geprüft' AND source='nutzer'", (f["id"],)):
+        return  # manuell eingeordnete Datei behält ihre Einordnung, auch wenn sie identisch mit einer anderen ist
     labels = {r["label"] for r in db.query("SELECT label FROM labels WHERE file_id=?", (src_id,))}
     labels |= {r["label"] for r in db.query("SELECT label FROM labels WHERE file_id=? AND source='nutzer'", (f["id"],))}
     cat = find_category(src["category"])
@@ -402,7 +408,10 @@ def run(job: Job, params: dict) -> dict:
     job.update(progress=total, message=f"{total}/{total} analysiert", **stats)
     from .scan_agent import refresh_dup_groups
     stats.update(refresh_dup_groups())
-    if not job.cancelled:  # 4. Ähnliche Dateien (Fotos, Versionen, PDF ↔ DOCX)
+    if not job.cancelled:  # 4. Ordner-Kontext: unsichere Einordnungen an sicher eingeordnete Nachbarn angleichen
+        from . import context_agent
+        stats["ordner_kontext"] = context_agent.apply()["ordner_kontext"]
+    if not job.cancelled:  # 5. Ähnliche Dateien (Fotos, Versionen, PDF ↔ DOCX)
         from . import similarity_agent
         job.update(message="Ähnliche Dateien werden gesucht …", **stats)
         stats["ähnlich"] = similarity_agent.refresh()
