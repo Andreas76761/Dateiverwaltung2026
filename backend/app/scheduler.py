@@ -181,6 +181,9 @@ def after_agent_scan() -> None:
 
 def tick(now: datetime | None = None) -> bool:
     """Prüft den Zeitplan; startet bei Fälligkeit einen Durchgang. -> True, wenn gestartet."""
+    from . import backup
+    if not busy():
+        backup.maybe_auto()  # tägliche Datensicherung – unabhängig davon, ob die Automatik an ist
     cfg = get_settings().automation
     if not cfg.get("enabled") or _current or busy():
         return False

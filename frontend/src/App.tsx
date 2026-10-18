@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Boxes, CalendarClock, CloudUpload, Copy, FolderKanban, FolderTree, HardDrive, Layers, LayoutDashboard, Loader2, Moon, PanelLeftClose, PanelLeftOpen, Settings as Cog, ShieldCheck, Sun } from "lucide-react";
+import { Boxes, CalendarClock, CloudUpload, Copy, FolderKanban, FolderTree, HardDrive, Layers, LayoutDashboard, Loader2, Moon, PanelLeftClose, PanelLeftOpen, Settings as Cog, ShieldCheck, Sun, Wand2 } from "lucide-react";
 import { JobsProvider, ToastProvider, useJobs } from "./components/ui";
 import Automation from "./pages/Automation";
 import CopyPage from "./pages/CopyPage";
@@ -8,6 +8,7 @@ import Explorer from "./pages/Explorer";
 import Programs from "./pages/Programs";
 import Proposal from "./pages/Proposal";
 import Settings from "./pages/Settings";
+import Setup from "./pages/Setup";
 import Similar from "./pages/Similar";
 import Sources from "./pages/Sources";
 import { JOB_LABEL } from "./util";
@@ -22,6 +23,7 @@ const NAV = [
   { id: "proposal", label: "Vorschlag & Prüfung", icon: FolderTree, step: 3 },
   { id: "copy", label: "Kopieren & Statistik", icon: CloudUpload, step: 4 },
   { sec: "System" },
+  { id: "setup", label: "Einrichtung", icon: Wand2 },
   { id: "sources", label: "Quellen & Agenten", icon: HardDrive },
   { id: "automation", label: "Automatik", icon: CalendarClock },
   { id: "programs", label: "Programme & LLMs", icon: Boxes },
@@ -123,6 +125,7 @@ function Shell() {
           {route.page === "similar" && <Similar key={route.raw} params={route.params} />}
           {route.page === "proposal" && <Proposal />}
           {route.page === "copy" && <CopyPage go={go} />}
+          {route.page === "setup" && <Setup key={route.raw} params={route.params} />}
           {route.page === "sources" && <Sources />}
           {route.page === "automation" && <Automation />}
           {route.page === "programs" && <Programs />}

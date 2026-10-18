@@ -1,4 +1,4 @@
-import { CalendarClock, CheckCircle2, CloudUpload, Copy, FileSearch, FolderTree, HardDrive, Laptop, Loader2, Play, ScanLine, ShieldCheck, Sparkles, Square } from "lucide-react";
+import { CalendarClock, CheckCircle2, CloudUpload, Wand2, Copy, FileSearch, FolderTree, HardDrive, Laptop, Loader2, Play, ScanLine, ShieldCheck, Sparkles, Square } from "lucide-react";
 import { useState } from "react";
 import { get, post } from "../api";
 import CostDialog from "../components/CostDialog";
@@ -19,6 +19,7 @@ export default function Dashboard({ go }: { go: (page: string) => void }) {
   const { jobs, running, refresh, version } = useJobs();
   const { data: s } = useAsync<Stats>(() => get("/api/stats"), [version]);
   const { data: auto } = useAsync<any>(() => get("/api/automation"), [version]);
+  const { data: setup } = useAsync<any>(() => get("/api/setup"), []);
   const toast = useToast();
 
   const start = async (url: string, body = {}) => {
@@ -59,6 +60,12 @@ export default function Dashboard({ go }: { go: (page: string) => void }) {
         </div>
       </div>
 
+      {setup?.demo && (
+        <div className="callout" style={{ fontSize: 13, cursor: "pointer" }} onClick={() => go("setup")}>
+          <Wand2 size={18} color="var(--accent)" />
+          <span><b>Demo-Daten.</b> Mit dem Einrichtungs-Assistenten legst du deine echten Computer, Festplatten und den Cloud-Zielordner fest – <u>Einrichtung starten</u></span>
+        </div>
+      )}
       <div className="grid g4">
         <div className="card kpi"><div className="k-label"><FileSearch size={14} /> Dateien erfasst</div><div className="k-val">{fmtNum(t.files)}</div><div className="k-sub">{fmtBytes(t.bytes)}{t.online_only ? ` · ☁ ${fmtNum(t.online_only)} nur online` : ""}</div></div>
         <div className="card kpi"><div className="k-label"><Sparkles size={14} /> Analysiert</div><div className="k-val">{fmtNum(t.analyzed)}</div><div className="k-sub">{t.files ? Math.round((t.analyzed / t.files) * 100) : 0} % · {fmtNum(s.thumbnails)} Miniaturen · {fmtNum(t.ocr)} OCR</div></div>

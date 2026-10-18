@@ -170,7 +170,7 @@ def _persist_overrides():
                              "thumbs_budget_gb": s.analysis.get("thumbs_budget_gb"),
                              "download_online_only": s.cloud.get("download_online_only"),
                              "cloud_download_content": (s.raw.get("cloud_api") or {}).get("download_content"),
-                             "automation": s.automation},
+                             "automation": s.automation, "backup": s.raw.get("backup") or {}},
                             ensure_ascii=False, indent=2), encoding="utf-8")
 
 
@@ -192,6 +192,8 @@ def load_overrides():
         if d.get("cloud_download_content") is not None:
             s.raw.setdefault("cloud_api", {})["download_content"] = d["cloud_download_content"]
         s.automation.update(d.get("automation") or {})
+        if d.get("backup"):
+            s.raw.setdefault("backup", {}).update(d["backup"])
 
 
 @router.get("/audit")

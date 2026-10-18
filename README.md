@@ -112,6 +112,18 @@ Vor dem echten Einsatz: **[docs/PROBELAUF.md](docs/PROBELAUF.md)** – ein Ordne
 ./probelauf.sh --ordner ~/Documents --max-dateien 2000              # macOS
 ```
 
+## Einrichtung & Datensicherung
+
+**Einrichtungs-Assistent** (Seite „Einrichtung“, beim ersten Start mit Demo-Daten auf der Übersicht verlinkt): in 4 Schritten statt `config/fdv.yaml` von Hand –
+1. **Dieser Computer**: erkannte Laufwerke, Benutzerordner und Cloud-Sync-Ordner ankreuzen oder per Ordnerauswahl hinzufügen; „Ordner prüfen“ zählt Dateien und warnt (fehlt, kein Zugriff, Systemordner, Zielordner liegt darin).
+2. **Weitere Computer** mit ihren Pfaden (werden dort vom Agenten gelesen).
+3. **Zielordner** – Vorschlag im erkannten Cloud-Ordner.
+4. **Prüfen & speichern** – danach „Jetzt einlesen“ und fertige Befehle für die Agenten (`dienst-einrichten …`).
+
+Vor dem Speichern wird die Datenbank gesichert, die bisherige Konfiguration bleibt als `fdv.yaml.<Zeitpunkt>.bak` erhalten. Beim Wechsel von den Demo-Daten auf echte Daten nutzt die App eine **eigene, neue Datenbank** (`daten/`); die Demo bleibt unberührt. Systemordner (Windows, Programme, AppData …) werden automatisch ausgelassen.
+
+**Datensicherung** (Reiter „Datensicherung“): Datenbank (Freigaben, eigene Labels und Zielpfade, Kopierprotokolle, Analyse), Einstellungen und Konfiguration als ZIP – konsistent im laufenden Betrieb und mit Integritätsprüfung. Automatisch alle 24 Stunden (einstellbar) in `<Datenordner>/backups`, zusätzlich wöchentlich (oder täglich) im Zielordner unter `_Sicherung` – damit auch in der Cloud. Wiederherstellen per Klick; der aktuelle Stand wird vorher gesichert. Aufgeräumt werden nur ältere automatische Sicherungen im lokalen Datenordner, im Zielordner wird nie etwas überschrieben oder gelöscht. Nicht gesichert: Miniaturen (lassen sich neu erzeugen) und Cloud-Anmeldungen.
+
 ## Eigene Computer & Festplatten
 
 `config/fdv.example.yaml` nach `config/fdv.yaml` kopieren und anpassen:
