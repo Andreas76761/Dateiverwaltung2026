@@ -46,8 +46,20 @@ def agent_config(computer_id: str):
     s = get_settings()
     comp = next((c for c in s.computers if c["id"] == computer_id), None)
     vols = comp["volumes"] if comp else db.query("SELECT id, name, path, kind FROM volumes WHERE computer_id=?", (computer_id,))
+    req = db.one("SELECT scan_requested_at FROM computers WHERE id=?", (computer_id,))
     return {"computer_id": computer_id, "volumes": vols, "exclude_dirs": sorted(s.exclude_dirs),
-            "exclude_ext": sorted(s.exclude_ext), "structure": s.target_structure}
+            "exclude_ext": sorted(s.exclude_ext), "structure": s.target_structure,
+            "scan_requested_at": req["scan_requested_at"] if req else None}
+
+
+@router.post("/{computer_id}/request-scan")
+def request_scan(computer_id: str):
+    """Agent soll beim nächsten Abruf (spätestens nach 10 Minuten) neu einlesen."""
+    with db.tx() as c:
+        n = c.execute("UPDATE computers SET scan_requested_at=? WHERE id=?", (db.now(), computer_id)).rowcount
+    if not n:
+        raise HTTPException(404, "Computer unbekannt")
+    return {"ok": True}
 
 
 class VolumeIn(BaseModel):
@@ -77,10 +89,12 @@ def ingest(body: IngestIn):
                   (v.id, body.computer_id, v.name, v.path, v.kind, v.total_bytes, v.free_bytes, db.now()))
         ids = scan_agent.upsert_entries(c, body.computer_id, v.id, body.entries)
         if body.final and body.scan_started:
-            c.execute("UPDATE files SET missing=1 WHERE volume_id=? AND scanned_at < ?", (v.id, body.scan_started))
+            scan_agent.finish_volume(c, v.id, body.scan_started, True)
         c.execute("UPDATE computers SET last_seen=? WHERE id=?", (db.now(), body.computer_id))
     if body.final:
         scan_agent.refresh_dup_groups()
+        from .. import scheduler
+        scheduler.after_agent_scan()  # Automatik: neue/geänderte Dateien des Agenten gleich analysieren
     return {"ids": ids}
 
 

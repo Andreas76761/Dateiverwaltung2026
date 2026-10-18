@@ -1,4 +1,4 @@
-import { CheckCircle2, CloudUpload, Copy, FileSearch, FolderTree, HardDrive, Laptop, Loader2, Play, ScanLine, ShieldCheck, Sparkles, Square } from "lucide-react";
+import { CalendarClock, CheckCircle2, CloudUpload, Copy, FileSearch, FolderTree, HardDrive, Laptop, Loader2, Play, ScanLine, ShieldCheck, Sparkles, Square } from "lucide-react";
 import { useState } from "react";
 import { get, post } from "../api";
 import CostDialog from "../components/CostDialog";
@@ -18,6 +18,7 @@ const STEPS = [
 export default function Dashboard({ go }: { go: (page: string) => void }) {
   const { jobs, running, refresh, version } = useJobs();
   const { data: s } = useAsync<Stats>(() => get("/api/stats"), [version]);
+  const { data: auto } = useAsync<any>(() => get("/api/automation"), [version]);
   const toast = useToast();
 
   const start = async (url: string, body = {}) => {
@@ -46,6 +47,11 @@ export default function Dashboard({ go }: { go: (page: string) => void }) {
           <p>{s.by_computer.length} Computer · {s.by_volume.length} Datenträger & Cloud-Ordner · LLM: <b>{s.llm_provider}</b></p>
         </div>
         <div className="spacer" />
+        <div className={`callout ${auto?.enabled ? "ok" : ""}`} style={{ padding: "8px 12px", cursor: "pointer" }} onClick={() => go("automation")} title="Automatik einstellen">
+          <CalendarClock size={18} color={auto?.enabled ? "var(--ok)" : undefined} />
+          <span>{auto?.running ? <>Automatik läuft: <b>{auto.running.schritt}</b></> : auto?.enabled
+            ? <>Automatik an · nächster Lauf <b>{fmtDate(auto.next_run, true)}</b></> : <>Automatik aus – <u>einrichten</u></>}</span>
+        </div>
         <div className="callout ok" style={{ padding: "8px 12px" }}>
           <ShieldCheck size={18} color="var(--ok)" />
           <span>Read-only: Es werden <b>keine</b> Dateien oder Ordner gelöscht oder verschoben.</span>

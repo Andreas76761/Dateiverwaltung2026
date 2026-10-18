@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Boxes, CloudUpload, Copy, FolderKanban, FolderTree, HardDrive, Layers, LayoutDashboard, Loader2, Moon, PanelLeftClose, PanelLeftOpen, Settings as Cog, ShieldCheck, Sun } from "lucide-react";
+import { Boxes, CalendarClock, CloudUpload, Copy, FolderKanban, FolderTree, HardDrive, Layers, LayoutDashboard, Loader2, Moon, PanelLeftClose, PanelLeftOpen, Settings as Cog, ShieldCheck, Sun } from "lucide-react";
 import { JobsProvider, ToastProvider, useJobs } from "./components/ui";
+import Automation from "./pages/Automation";
 import CopyPage from "./pages/CopyPage";
 import Dashboard from "./pages/Dashboard";
 import Explorer from "./pages/Explorer";
@@ -22,6 +23,7 @@ const NAV = [
   { id: "copy", label: "Kopieren & Statistik", icon: CloudUpload, step: 4 },
   { sec: "System" },
   { id: "sources", label: "Quellen & Agenten", icon: HardDrive },
+  { id: "automation", label: "Automatik", icon: CalendarClock },
   { id: "programs", label: "Programme & LLMs", icon: Boxes },
   { id: "settings", label: "Einstellungen", icon: Cog },
 ] as const;
@@ -122,6 +124,7 @@ function Shell() {
           {route.page === "proposal" && <Proposal />}
           {route.page === "copy" && <CopyPage go={go} />}
           {route.page === "sources" && <Sources />}
+          {route.page === "automation" && <Automation />}
           {route.page === "programs" && <Programs />}
           {route.page === "settings" && <Settings />}
         </div>

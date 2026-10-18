@@ -25,9 +25,13 @@ def upsert_entries(conn, computer_id: str, volume_id: str, entries: list[dict]) 
     existing = {}
     for i in range(0, len(entries), 500):  # vorhandene Einträge blockweise statt einzeln nachschlagen
         part = [e["rel_path"] for e in entries[i:i + 500]]
-        for r in conn.execute(f"SELECT id, rel_path, size, mtime, online_only FROM files WHERE volume_id=? AND rel_path IN "
+        for r in conn.execute(f"SELECT id, rel_path, size, mtime, online_only, missing, review_status FROM files WHERE volume_id=? AND rel_path IN "
                               f"({','.join('?' * len(part))})", (volume_id, *part)):
             existing[r["rel_path"]] = r
+    # Änderungen nur protokollieren, wenn die Festplatte schon einmal vollständig gelesen wurde (nicht beim Erst-Scan)
+    vol = conn.execute("SELECT scan_count FROM volumes WHERE id=?", (volume_id,)).fetchone()
+    record = bool(vol and vol["scan_count"])
+    events: list[tuple] = []
     for e in entries:
         ext, ftype, mime = detect(e["name"])
         online = int(bool(e.get("online_only")))
@@ -43,6 +47,8 @@ def upsert_entries(conn, computer_id: str, volume_id: str, entries: list[dict]) 
             )
             ids[e["rel_path"]] = cur.lastrowid
             db.fts_update(conn, cur.lastrowid)
+            if record:
+                events.append((ts, cur.lastrowid, volume_id, "neu", None))
         else:
             # Geändert – oder inzwischen heruntergeladen (vorher nur online): Inhalt neu analysieren
             changed = row["size"] != e["size"] or row["mtime"] != e["mtime"] or (row["online_only"] and not online)
@@ -56,20 +62,79 @@ def upsert_entries(conn, computer_id: str, volume_id: str, entries: list[dict]) 
                      e.get("page_count"), ts, online, e.get("remote_id"), e.get("web_url"), e.get("remote_hash"), row["id"]),
                 )
                 db.fts_update(conn, row["id"])
+                detail = _change_text(row, e, online)
+                if row["review_status"] == "freigegeben":
+                    # Freigabe galt dem alten Inhalt → erneut prüfen lassen, bevor kopiert wird
+                    conn.execute("UPDATE files SET review_status='offen' WHERE id=?", (row["id"],))
+                    detail += " · nach Freigabe geändert – bitte erneut prüfen"
+                if record:
+                    events.append((ts, row["id"], volume_id, "geändert", detail))
             else:
+                if record and row["missing"]:
+                    events.append((ts, row["id"], volume_id, "wieder_da", None))
                 conn.execute(
                     """UPDATE files SET path=?, scanned_at=?, missing=0, online_only=?, sha256=COALESCE(?, sha256),
                        remote_id=COALESCE(?, remote_id), web_url=COALESCE(?, web_url), remote_hash=COALESCE(?, remote_hash) WHERE id=?""",
                     (e["path"], ts, online, e.get("sha256"), e.get("remote_id"), e.get("web_url"), e.get("remote_hash"), row["id"]),
                 )
             ids[e["rel_path"]] = row["id"]
+    if events:
+        conn.executemany("INSERT INTO file_events(ts, file_id, volume_id, kind, detail) VALUES (?,?,?,?,?)", events)
     return ids
+
+
+def _fmt_bytes(n: int | None) -> str:
+    v = float(n or 0)
+    for unit in ("B", "KB", "MB", "GB"):
+        if v < 1024 or unit == "GB":
+            return f"{v:.0f} {unit}" if unit == "B" else f"{v:.1f} {unit}".replace(".", ",")
+        v /= 1024
+    return ""
+
+
+def _change_text(row, e: dict, online: int) -> str:
+    parts = []
+    if row["size"] != e["size"]:
+        parts.append(f"Größe {_fmt_bytes(row['size'])} → {_fmt_bytes(e['size'])}")
+    if row["mtime"] != e["mtime"]:
+        parts.append(f"gespeichert {str(e['mtime'])[:16].replace('T', ' ')}")
+    if row["online_only"] and not online:
+        parts.append("jetzt lokal verfügbar")
+    return ", ".join(parts) or "geändert"
+
+
+def scan_start(volume_id: str) -> str:
+    """Startzeitpunkt eines Scans – garantiert später als jeder bisherige Eintrag der Festplatte
+    (Zeitstempel sind sekundengenau; sonst würden bei zwei Scans in derselben Sekunde Dateien nicht als fehlend erkannt)."""
+    import time
+
+    last = db.one("SELECT MAX(scanned_at) m FROM files WHERE volume_id=?", (volume_id,))["m"]
+    started = db.now()
+    while last and started <= last:
+        time.sleep(0.2)
+        started = db.now()
+    return started
+
+
+def finish_volume(c, volume_id: str, started: str, complete: bool) -> int:
+    """Ende eines Festplatten-Scans: nicht mehr gefundene Dateien NUR markieren (nie löschen) und protokollieren.
+    -> Anzahl neu fehlender Dateien"""
+    n = 0
+    if complete:
+        vol = c.execute("SELECT scan_count FROM volumes WHERE id=?", (volume_id,)).fetchone()
+        if vol and vol["scan_count"]:
+            c.execute("""INSERT INTO file_events(ts, file_id, volume_id, kind, detail)
+                         SELECT ?, id, volume_id, 'fehlt', 'nicht mehr gefunden (verschoben, umbenannt oder gelöscht)' FROM files
+                         WHERE volume_id=? AND scanned_at < ? AND missing=0""", (db.now(), volume_id, started))
+        n = c.execute("UPDATE files SET missing=1 WHERE volume_id=? AND scanned_at < ? AND missing=0", (volume_id, started)).rowcount
+        c.execute("UPDATE volumes SET scan_count=COALESCE(scan_count, 0) + 1 WHERE id=?", (volume_id,))
+    return n
 
 
 def scan_volume(job: Job, vol: dict, counters: dict) -> None:
     errors: list[str] = []
     batch: list[dict] = []
-    started = db.now()
+    started = scan_start(vol["id"])
 
     def flush():
         with db.tx() as c:
@@ -97,10 +162,8 @@ def scan_volume(job: Job, vol: dict, counters: dict) -> None:
         flush()
 
     with db.tx() as c:
-        if not job.cancelled and not truncated:  # bei Dateilimit nicht vollständig gelesen → nichts als fehlend markieren
-            # Nicht mehr gefundene Dateien nur markieren – niemals aus der DB oder dem Datenträger löschen
-            cur = c.execute("UPDATE files SET missing=1 WHERE volume_id=? AND scanned_at < ?", (vol["id"], started))
-            counters["nicht_mehr_gefunden"] += cur.rowcount
+        # bei Abbruch/Dateilimit nicht vollständig gelesen → nichts als fehlend markieren
+        counters["nicht_mehr_gefunden"] += finish_volume(c, vol["id"], started, not job.cancelled and not truncated)
         try:
             du = shutil.disk_usage(vol["path"])
             c.execute("UPDATE volumes SET total_bytes=?, free_bytes=?, last_scan=? WHERE id=?",
@@ -251,7 +314,7 @@ def scan_cloud_accounts(job: Job, wanted: set[str], counters: dict) -> dict:
         if (wanted and acc.volume_id not in wanted) or not cloud_api.status(acc)["connected"]:
             continue
         job.update(message=f"Lese {acc.name} über die Cloud-Schnittstelle …", **counters)
-        started = db.now()
+        started = scan_start(acc.volume_id)
         batch: list[dict] = []
         n = 0
         try:
@@ -270,9 +333,7 @@ def scan_cloud_accounts(job: Job, wanted: set[str], counters: dict) -> dict:
                 with db.tx() as c:
                     upsert_entries(c, "cloud-api", acc.volume_id, batch)
             with db.tx() as c:
-                if not job.cancelled and not acc.max_items:
-                    cur = c.execute("UPDATE files SET missing=1 WHERE volume_id=? AND scanned_at < ?", (acc.volume_id, started))
-                    counters["nicht_mehr_gefunden"] += cur.rowcount
+                counters["nicht_mehr_gefunden"] += finish_volume(c, acc.volume_id, started, not job.cancelled and not acc.max_items)
                 c.execute("UPDATE volumes SET last_scan=? WHERE id=?", (db.now(), acc.volume_id))
                 c.execute("UPDATE computers SET last_seen=? WHERE id='cloud-api'", (db.now(),))
             res["cloud_konten"] += 1
@@ -281,6 +342,12 @@ def scan_cloud_accounts(job: Job, wanted: set[str], counters: dict) -> dict:
         except cloud_api.CloudError as exc:
             res["cloud_hinweise"].append(f"{acc.name}: {exc}")
     return res
+
+
+def event_counts(since: str) -> dict:
+    """Änderungen seit einem Zeitpunkt: {"neu": n, "geändert": n, "fehlt": n, "wieder_da": n}"""
+    rows = db.query("SELECT kind, COUNT(*) n FROM file_events WHERE ts >= ? GROUP BY 1", (since,))
+    return {k: 0 for k in ("neu", "geändert", "fehlt", "wieder_da")} | {r["kind"]: r["n"] for r in rows}
 
 
 def run(job: Job, params: dict) -> dict:
@@ -294,6 +361,7 @@ def run(job: Job, params: dict) -> dict:
             if (not wanted or v["id"] in wanted) and os.path.isdir(v["path"]):
                 vols.append({**v, "computer_id": comp["id"]})
     counters = {"dateien": 0, "bytes": 0, "fehler": 0, "nicht_mehr_gefunden": 0, "nur_online": 0, "festplatten": len(vols)}
+    since = db.now()
     for vol in vols:
         if job.cancelled:
             break
@@ -302,5 +370,6 @@ def run(job: Job, params: dict) -> dict:
     counters.update(scan_cloud_accounts(job, wanted, counters))
     job.update(message="Duplikate werden ermittelt …", **counters)
     counters.update(compute_duplicates(job))
+    counters["änderungen"] = event_counts(since)
     job.update(progress=counters["dateien"], total=counters["dateien"], message="Einlesen abgeschlossen", **counters)
     return counters

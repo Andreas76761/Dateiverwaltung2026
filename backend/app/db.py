@@ -284,6 +284,15 @@ MIGRATIONS = [
     "CREATE INDEX IF NOT EXISTS ix_files_sim ON files(sim_group)",
     "CREATE TABLE IF NOT EXISTS similar_pairs (a INTEGER NOT NULL, b INTEGER NOT NULL, kind TEXT, score REAL, PRIMARY KEY (a, b))",
     "CREATE INDEX IF NOT EXISTS ix_simpairs_b ON similar_pairs(b)",
+    # Automatik: Änderungsprotokoll je Datei und Läufe des Zeitplans
+    "ALTER TABLE volumes ADD COLUMN scan_count INTEGER DEFAULT 0",
+    "ALTER TABLE computers ADD COLUMN scan_requested_at TEXT",      # Agent soll beim nächsten Abruf einlesen
+    """CREATE TABLE IF NOT EXISTS file_events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, file_id INTEGER NOT NULL,
+       volume_id TEXT, kind TEXT NOT NULL, detail TEXT)""",          # neu | geändert | fehlt | wieder_da
+    "CREATE INDEX IF NOT EXISTS ix_events_ts ON file_events(ts)",
+    "CREATE INDEX IF NOT EXISTS ix_events_file ON file_events(file_id)",
+    """CREATE TABLE IF NOT EXISTS automation_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, trigger TEXT, status TEXT,
+       started_at TEXT, finished_at TEXT, summary TEXT)""",
     # Volltextsuche über Name, Pfad, Zusammenfassung, Inhalt, OCR und Labels (rowid = files.id)
     "CREATE VIRTUAL TABLE IF NOT EXISTS files_fts USING fts5(name, path, body, tokenize='unicode61 remove_diacritics 2')",
 ]

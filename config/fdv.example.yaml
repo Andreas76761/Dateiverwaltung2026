@@ -97,6 +97,19 @@ cloud_api:
   #   root: /
   #   target_folder: Future-Dateiverwaltung
 
+# Automatik: regelmäßig einlesen, Änderungen erkennen, neue/geänderte Dateien analysieren.
+# Kopiert wird NIE automatisch – nur nach manueller Prüfung (Schritt 4). Einstellbar auch unter „Automatik“.
+automation:
+  enabled: false
+  mode: täglich                  # intervall | täglich | wöchentlich
+  interval_hours: 6
+  time: "02:30"                  # Ortszeit des Servers
+  weekday: 6                     # 0 = Montag … 6 = Sonntag (wöchentlich)
+  analyze: true
+  use_llm: false                 # false = automatisch nur Offline-Regeln (keine Kosten)
+  max_cost_usd: 2                # Kostenlimit je automatischem Lauf, falls use_llm
+  inventory: true
+
 # Cloud-Dateien, die nur online liegen (Platzhalter von OneDrive/Google Drive/iCloud/Dropbox/Nextcloud)
 cloud:
   download_online_only: false   # false = nur Metadaten, nichts herunterladen (empfohlen)

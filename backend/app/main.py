@@ -9,8 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import db, jobs
-from .api import agents, cloud, files, pipeline, system
+from . import db, jobs, scheduler
+from .api import agents, automation, cloud, files, pipeline, system
 from .config import PROJECT_ROOT, get_settings
 from .middleware import ApiKeyMiddleware, AuditMiddleware, NoDeleteMiddleware
 
@@ -25,8 +25,11 @@ async def lifespan(app: FastAPI):
     stale = jobs.recover_stale()
     s = get_settings()
     _auto_resume(stale)
-    logging.getLogger("fdv").info("Konfiguration: %s | Ziel: %s | LLM: %s", s.source, s.target_root, s.llm["provider"])
+    scheduler.start()  # Zeitplan (Einlesen + Analyse); kopiert wird nie automatisch
+    logging.getLogger("fdv").info("Konfiguration: %s | Ziel: %s | LLM: %s | Automatik: %s", s.source, s.target_root,
+                                  s.llm["provider"], "an" if s.automation.get("enabled") else "aus")
     yield
+    scheduler.stop()
 
 
 def _auto_resume(stale: list[dict]) -> None:
@@ -56,7 +59,7 @@ app.add_middleware(ApiKeyMiddleware)
 app.add_middleware(NoDeleteMiddleware)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST"], allow_headers=["*"])
 
-for r in (files.router, pipeline.router, system.router, agents.router, cloud.router):
+for r in (files.router, pipeline.router, system.router, agents.router, cloud.router, automation.router):
     app.include_router(r)
 
 if FRONTEND_DIST.exists():

@@ -77,6 +77,19 @@ class Settings:
             "sparse_heuristic": False,           # Linux/FUSE: Größe > 0 ohne Blöcke = online
             **raw.get("cloud", {}),
         }
+        # Automatik: regelmäßig einlesen + neue/geänderte Dateien analysieren. Kopiert wird NIE automatisch.
+        self.automation = {
+            "enabled": False,
+            "mode": "täglich",                   # intervall | täglich | wöchentlich
+            "interval_hours": 6,
+            "time": "02:30",                     # Uhrzeit (Ortszeit des Servers) für täglich/wöchentlich
+            "weekday": 6,                        # 0 = Montag … 6 = Sonntag
+            "analyze": True,                     # neue und geänderte Dateien gleich analysieren
+            "use_llm": False,                    # False = automatisch nur Offline-Regeln (keine Kosten)
+            "max_cost_usd": 2.0,                 # Kostenlimit je automatischem Lauf (nur mit use_llm)
+            "inventory": True,                   # Programme & LLMs mit auffrischen
+            **raw.get("automation", {}),
+        }
         tgt = raw.get("target", {})
         self.target_root = _resolve(tgt.get("root", "./data/target"))
         self.target_structure = tgt.get("structure", "{group}/{category}/{year}")

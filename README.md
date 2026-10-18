@@ -43,6 +43,26 @@ Zusätzlich zu exakten Duplikaten (gleicher SHA-256) findet die App **zusammenge
 
 Je Gruppe wird eine Empfehlung markiert (★ höchste Versionsangabe bzw. neuestes Datum, bei Fotos die größte Datei); ältere Versionen erhalten das Label „Ältere Version“ und rutschen in der Wichtigkeit nach unten. Verschiedene Dokumente mit ähnlichem Namen (`Rechnung_045` / `Rechnung_046`, Protokolle mit anderem Datum) und gleichnamige Dateien mit völlig anderem Inhalt werden bewusst **nicht** zusammengefasst. In Schritt 4 lassen sich ältere Versionen auf Wunsch auslassen („Nur neueste Versionen kopieren“). Es wird nichts gelöscht oder zusammengeführt. Der Vergleich läuft über Kandidaten-Bänder (LSH) und schafft im Lasttest 100.000 Dateien in wenigen Sekunden.
 
+## Automatik & Hintergrunddienst
+
+**Zeitplan** (Seite „Automatik“ oder `automation:` in `fdv.yaml`): alle N Stunden, täglich oder wöchentlich zu einer Uhrzeit. Ein Durchgang liest alle Festplatten und Cloud-Konten ein, fordert die Agenten auf den anderen Computern zum Einlesen auf, analysiert neue und geänderte Dateien (inkl. Duplikate und ähnliche Dateien) und frischt das Programm-Inventar auf. Verpasste Termine (Computer war aus) werden einmal nachgeholt; läuft gerade ein anderer Job, wartet die Automatik.
+
+- **Kosten:** Automatisch wird standardmäßig nur mit den Offline-Regeln eingeordnet. Das LLM lässt sich ausdrücklich zuschalten – mit eigenem Kostenlimit je Lauf. Offline eingeordnete Dateien holt die nächste manuelle LLM-Analyse nach.
+- **Änderungsprotokoll:** Ab dem zweiten Einlesen einer Festplatte werden neue, geänderte, nicht mehr gefundene und wieder aufgetauchte Dateien protokolliert. Wird eine bereits **freigegebene** Datei geändert, setzt die App die Freigabe auf „offen“ zurück – die Freigabe galt dem alten Inhalt.
+- **Kopieren nie automatisch:** Schritt 4 bleibt an die manuelle Prüfung gebunden. Die Automatik löscht, verschiebt und kopiert nichts.
+
+**Als Hintergrunddienst einrichten** (startet bei jeder Anmeldung, ohne Fenster, Neustart bei Fehlern):
+
+```powershell
+# Windows (Aufgabenplanung) – Agent auf einem weiteren Computer
+.\dienst-einrichten.ps1 agent --server http://BUERO-PC:8800 --computer laptop --key GEHEIM --target "$env:OneDrive\Future-Dateiverwaltung"
+.\dienst-einrichten.ps1 server          # zentraler Server mit Oberfläche und Zeitplan
+.\dienst-einrichten.ps1 status
+.\dienst-einrichten.ps1 entfernen agent # Dienst austragen – Dateien bleiben unberührt
+```
+
+macOS (launchd) und Linux (systemd-Benutzerdienst): `./dienst-einrichten.sh …` mit denselben Befehlen; `--nur-anzeigen` zeigt vorher, was eingerichtet würde. Unter Windows wird bewusst die Aufgabenplanung „bei Anmeldung“ statt eines SYSTEM-Dienstes genutzt: So läuft der Agent als angemeldeter Benutzer und sieht dessen OneDrive/Google-Drive-Ordner. Der API-Key steht nicht in der Aufgabe, sondern in einer nur für den Benutzer lesbaren `agent.json`. Der Agent liest alle 24 Stunden (`--interval`) und auf Anforderung des Servers neu ein, meldet sich alle 10 Minuten und führt dabei nur freigegebene Kopien aus. Protokoll: `fdv-agent.log` (Pfad zeigt der Installer an).
+
 ## Probelauf auf einem echten Computer
 
 Vor dem echten Einsatz: **[docs/PROBELAUF.md](docs/PROBELAUF.md)** – ein Ordner, Dateilimit, Trockenlauf, Vorher/Nachher-Nachweis, dass nichts verändert wurde, und ein Bericht zum Zurückmelden:
@@ -137,7 +157,7 @@ backend/app
 frontend/                React + TypeScript + Vite
 ```
 
-Frontend-Ansichten: Übersicht (Pipeline, KPIs) · Explorer (Baum Computer › Festplatte › Ordner, Suche in Name/Inhalt/OCR/Labels, Filter nach Bereich, 50 Kategorien, Dateityp, Label, Speicherdatum, Duplikaten, Prüfstatus; Sortierung nach Wichtigkeit, Datum, Typ …; Liste/Galerie/**Seiten** – in der Seitenansicht sind bei PDF, PPTX, DOCX, XLSX (ein Bild je Tabellenblatt), PNG und JPEG alle Seiten direkt als Miniaturen sichtbar, bei **Videos** Standbilder über die Laufzeit (mit Zeitmarke, Player im Detail) und bei **E-Mails** (.eml, Outlook .msg) die Mail-Seite plus alle Seiten der Anhänge, Klick öffnet die Großansicht mit ←/→; Navigation und Ordnerbaum einklappbar (Strg+B); Detail mit Miniaturen aller Seiten, Labels, OCR, Duplikaten, ähnlichen Dateien, Zielpfad) · Ähnliche Dateien (Gruppen mit Vorschau, Empfehlung ★) · Vorschlag & Prüfung · Kopieren & Statistik · Quellen & Agenten · Programme & LLMs · Einstellungen.
+Frontend-Ansichten: Übersicht (Pipeline, KPIs) · Explorer (Baum Computer › Festplatte › Ordner, Suche in Name/Inhalt/OCR/Labels, Filter nach Bereich, 50 Kategorien, Dateityp, Label, Speicherdatum, Duplikaten, Prüfstatus; Sortierung nach Wichtigkeit, Datum, Typ …; Liste/Galerie/**Seiten** – in der Seitenansicht sind bei PDF, PPTX, DOCX, XLSX (ein Bild je Tabellenblatt), PNG und JPEG alle Seiten direkt als Miniaturen sichtbar, bei **Videos** Standbilder über die Laufzeit (mit Zeitmarke, Player im Detail) und bei **E-Mails** (.eml, Outlook .msg) die Mail-Seite plus alle Seiten der Anhänge, Klick öffnet die Großansicht mit ←/→; Navigation und Ordnerbaum einklappbar (Strg+B); Detail mit Miniaturen aller Seiten, Labels, OCR, Duplikaten, ähnlichen Dateien, Zielpfad) · Ähnliche Dateien (Gruppen mit Vorschau, Empfehlung ★) · Vorschlag & Prüfung · Kopieren & Statistik · Quellen & Agenten · Automatik (Zeitplan, Änderungsprotokoll, Agenten) · Programme & LLMs · Einstellungen.
 
 ## Entwicklung
 

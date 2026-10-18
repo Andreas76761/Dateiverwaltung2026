@@ -63,9 +63,12 @@ def rules_result(f: dict, ctx: dict) -> dict:
     return llm.normalize(RulesProvider().analyze({**f, "page_count": ctx["pages"]}, ctx["full"]))
 
 
+AUTO_RULES = "regeln (automatisch)"
+
+
 def needs_llm(rules: dict, params: dict) -> bool:
     s = get_settings().llm
-    if s["provider"] == "rules":
+    if s["provider"] == "rules" or params.get("nur_regeln"):
         return False
     mode = params.get("mode") or s.get("mode", "alle")
     return not (mode == "unklare" and rules["confidence"] >= float(s.get("hybrid_min_confidence", 0.6)))
@@ -184,7 +187,8 @@ def _analyze(f: dict, local: bool, params: dict, meter: CostMeter, path_override
             result, provider = rules, "regeln (Kostenlimit)"
             stat["kostenlimit"] = 1
     else:
-        result, provider = rules, ("regeln" if get_settings().llm["provider"] == "rules" else "regeln (sicher)")
+        result, provider = rules, ("regeln" if get_settings().llm["provider"] == "rules" else
+                                   AUTO_RULES if params.get("nur_regeln") else "regeln (sicher)")
         stat["nur_regeln"] = int(provider != "regeln")
     stat.update(finalize(f, ctx, result, provider, rules["confidence"]))
     return stat
@@ -232,6 +236,10 @@ def select_files(params: dict) -> tuple[list[dict], list[tuple[dict, int]], set[
         args += ids
     elif not params.get("force"):
         where += " AND status!='analysiert'"
+        if get_settings().llm["provider"] != "rules" and not params.get("nur_regeln"):
+            # von der Automatik nur offline eingeordnet → beim nächsten LLM-Lauf nachholen
+            where = where.replace("status!='analysiert'", "(status!='analysiert' OR llm_provider=?)")
+            args.append(AUTO_RULES)
     files = [f for f in db.query(f"SELECT * FROM files WHERE {where} ORDER BY importance DESC, id", args)
              if f["id"] not in in_batch]
     analyzed = {} if params.get("force") else {
@@ -339,7 +347,7 @@ def run(job: Job, params: dict) -> dict:
     stats = {"analysiert": 0, "ocr": 0, "miniaturen": 0, "fehler": 0, "provider": s.llm["provider"], "llm": 0,
              "llm_fallback": 0, "nur_regeln": 0, "kostenlimit": 0, "duplikate_übernommen": 0,
              "modus": params.get("mode") or s.llm.get("mode", "alle")}
-    batch_mode = s.llm["provider"] == "anthropic" and bool(params.get("batch", s.llm.get("batch")))
+    batch_mode = s.llm["provider"] == "anthropic" and not params.get("nur_regeln") and bool(params.get("batch", s.llm.get("batch")))
 
     # 1. Batches aus einem früheren (unterbrochenen) Lauf zu Ende bringen
     from ..llm import batch as batchmod

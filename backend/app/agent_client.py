@@ -10,6 +10,13 @@ Befehle:
   inventory  installierte Programme, LLM-Tools und lokale Modelle melden
   copy       freigegebene Kopien vom Server abholen und lokal in den Cloud-Ordner kopieren
   watch      alle 10 Minuten: copy + Heartbeat (dauerhaft laufen lassen)
+  service    Dauerbetrieb als Hintergrunddienst: Heartbeat + freigegebene Kopien alle 10 Minuten,
+             Einlesen + Inventar nach Zeitplan (--interval) und auf Anforderung des Servers.
+             Einrichten als Dienst (Windows-Aufgabenplanung, macOS launchd, Linux systemd):
+             python -m app.service_install agent --server … --computer …
+
+Statt der Optionen kann eine Konfigurationsdatei genutzt werden (legt der Dienst-Installer an):
+    python -m app.agent_client --config ~/.fdv-agent.json service
 
 Der Agent löscht, verschiebt oder überschreibt niemals Dateien.
 """
@@ -17,13 +24,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import platform
 import shutil
 import sys
 import tempfile
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
@@ -40,6 +48,7 @@ def iso(ts: float) -> str:
 class Agent:
     def __init__(self, server: str, computer: str, key: str, target: str | None, thumbs: bool, download_online: bool = False):
         self.download_online = download_online
+        self.service_mode = False
         self.server = server.rstrip("/")
         self.computer = computer
         self.http = httpx.Client(base_url=self.server, headers={"X-API-Key": key} if key else {}, timeout=120)
@@ -171,6 +180,8 @@ class Agent:
         from .safety import SafetyError, safe_copy
 
         if not self.target:
+            if self.service_mode:
+                return  # ohne Cloud-Ordner keine Kopien – Dienst läuft trotzdem weiter
             sys.exit("--target (lokaler Cloud-Ordner) fehlt")
         tasks = self.http.get(f"/api/agents/{self.computer}/copy-tasks").raise_for_status().json()
         print(f"{len(tasks)} Kopieraufgaben")
@@ -184,18 +195,81 @@ class Agent:
             print(" ", body["status"], t["src"])
 
 
+    # ---------------- Dauerbetrieb ----------------
+    def scan_due(self, interval_h: float) -> str | None:
+        """-> Grund für einen Scan oder None. Server-Anforderung hat Vorrang vor dem eigenen Zeitplan."""
+        cfg = self.http.get(f"/api/agents/{self.computer}/config").raise_for_status().json()
+        last = self.state.get("last_scan_started")
+        req = cfg.get("scan_requested_at")
+        if req and (not last or req > last):
+            return "angefordert vom Server"
+        if interval_h and (not last or datetime.now(timezone.utc) - datetime.fromisoformat(last) >= timedelta(hours=interval_h)):
+            return "Zeitplan" if last else "erster Lauf"
+        return None
+
+    def service(self, interval_h: float = 24, poll_min: float = 10, once: bool = False):
+        """Läuft dauerhaft: Fehler (Server nicht erreichbar, Netzwerk weg) werden protokolliert, dann geht es weiter."""
+        self.service_mode = True
+        log = logging.getLogger("fdv.agent")
+        log.info("Dienst gestartet: Server %s, Computer %s, Einlesen alle %s h", self.server, self.computer, interval_h or "–")
+        while True:
+            try:
+                self.heartbeat()
+                why = self.scan_due(interval_h)
+                if why:
+                    log.info("Einlesen (%s) …", why)
+                    started = datetime.now(timezone.utc).isoformat(timespec="seconds")
+                    self.scan()
+                    self.inventory()
+                    self.state["last_scan_started"] = started
+                    self.save_state()
+                    log.info("Einlesen fertig")
+                self.copy()  # nur Aufgaben, die nach manueller Prüfung freigegeben wurden
+            except (httpx.HTTPError, OSError) as exc:
+                log.warning("Server nicht erreichbar oder Fehler: %s – neuer Versuch in %s min", exc, poll_min)
+            except Exception:
+                log.exception("Unerwarteter Fehler – Dienst läuft weiter")
+            if once:
+                return
+            time.sleep(max(poll_min, 0.1) * 60)
+
+
+def load_config_file(path: str) -> dict:
+    p = Path(path).expanduser()
+    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+
+
 def main():
     ap = argparse.ArgumentParser(description="Future Dateiverwaltung – Agent")
-    ap.add_argument("--server", required=True)
-    ap.add_argument("--computer", required=True, help="Computer-ID aus der zentralen Konfiguration")
+    ap.add_argument("--config", help="JSON mit server, computer, key, target, interval_hours (z. B. vom Dienst-Installer)")
+    ap.add_argument("--server")
+    ap.add_argument("--computer", help="Computer-ID aus der zentralen Konfiguration")
+    ap.add_argument("--interval", type=float, default=None, help="service: alle N Stunden einlesen (0 = nur auf Anforderung)")
+    ap.add_argument("--once", action="store_true", help="service: nur einen Durchgang (zum Testen)")
+    ap.add_argument("--log", help="Protokolldatei (Standard: ~/.fdv-agent.log im Dienstbetrieb)")
     ap.add_argument("--key", default=os.environ.get("FDV_API_KEY", ""))
     ap.add_argument("--target", help="Lokaler Cloud-Sync-Ordner für Schritt 4")
     ap.add_argument("--no-thumbs", action="store_true")
     ap.add_argument("--download-online-only", action="store_true",
                     help="Auch Cloud-Platzhalter (nur online) lesen – löst den Download aus!")
-    ap.add_argument("commands", nargs="+", choices=["scan", "inventory", "copy", "watch"])
+    ap.add_argument("commands", nargs="+", choices=["scan", "inventory", "copy", "watch", "service"])
     a = ap.parse_args()
-    agent = Agent(a.server, a.computer, a.key, a.target, not a.no_thumbs, a.download_online_only)
+    cfg = load_config_file(a.config) if a.config else {}
+    server, computer = a.server or cfg.get("server"), a.computer or cfg.get("computer")
+    if not server or not computer:
+        ap.error("--server und --computer angeben (oder --config)")
+    key = a.key or cfg.get("key", "")
+    target = a.target or cfg.get("target")
+    if "service" in a.commands:
+        logfile = a.log or cfg.get("log") or str(Path.home() / ".fdv-agent.log")
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
+                            handlers=[logging.FileHandler(logfile, encoding="utf-8"), logging.StreamHandler()])
+    agent = Agent(server, computer, key, target, not (a.no_thumbs or cfg.get("no_thumbs")),
+                  a.download_online_only or bool(cfg.get("download_online_only")))
+    if "service" in a.commands:
+        interval = a.interval if a.interval is not None else float(cfg.get("interval_hours", 24))
+        agent.service(interval, float(cfg.get("poll_minutes", 10)), once=a.once)
+        return
     agent.heartbeat()
     for cmd in a.commands:
         if cmd == "watch":

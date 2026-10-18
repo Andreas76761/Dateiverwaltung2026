@@ -95,7 +95,10 @@ python -m app.agent_client \\
   --key  <API-KEY> \\
   --target "C:/Users/andreas/OneDrive/Future-Dateiverwaltung" \\
   scan inventory copy`}</div>
-          <div className="faint" style={{ fontSize: 12 }}>Mit <span className="mono">watch</span> statt <span className="mono">copy</span> läuft der Agent dauerhaft und holt alle 10 Minuten neue Kopieraufträge ab.</div>
+          <div className="faint" style={{ fontSize: 12.5 }}>4. Dauerhaft als <b>Hintergrunddienst</b> einrichten (startet bei jeder Anmeldung, liest alle 24 h und auf Anforderung neu ein, holt alle 10 Minuten freigegebene Kopien ab):</div>
+          <div className="code">{`.\\dienst-einrichten.ps1 agent --server ${server} --computer laptop --key <API-KEY> --target "$env:OneDrive\\Future-Dateiverwaltung"   # Windows
+./dienst-einrichten.sh  agent --server ${server} --computer macbook --key <API-KEY> --target ~/OneDrive/Future-Dateiverwaltung  # macOS/Linux`}</div>
+          <div className="faint" style={{ fontSize: 12 }}>Zeitplan und „Einlesen anfordern“ für alle Agenten: Seite <a href="#/automation">Automatik</a>.</div>
         </div>
       </div>
     </div>
