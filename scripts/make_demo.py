@@ -142,6 +142,28 @@ def dup(src: Path, dst: Path):
     shutil.copy2(src, dst)
 
 
+def png_diagram(p: Path, title: str, boxes: list[str], y: int):
+    """PNG-Grafik (z. B. Architekturdiagramm / Screenshot) – für die Miniaturansicht."""
+    p.parent.mkdir(parents=True, exist_ok=True)
+    im = Image.new("RGBA", (1400, 800), (248, 250, 252, 255))
+    dr = ImageDraw.Draw(im)
+    try:
+        f1, f2 = ImageFont.truetype("DejaVuSans-Bold.ttf", 44), ImageFont.truetype("DejaVuSans.ttf", 28)
+    except OSError:
+        f1 = f2 = ImageFont.load_default()
+    dr.rectangle([0, 0, 1400, 110], fill=(79, 70, 229, 255))
+    dr.text((50, 30), title, fill="white", font=f1)
+    for i, b in enumerate(boxes):
+        x = 60 + (i % 3) * 440
+        yy = 190 + (i // 3) * 260
+        dr.rounded_rectangle([x, yy, x + 380, yy + 170], 22, fill=(238, 240, 255, 255), outline=(99, 102, 241, 255), width=4)
+        dr.text((x + 30, yy + 65), b, fill=(30, 41, 59), font=f2)
+        if i % 3 < 2 and i + 1 < len(boxes):
+            dr.line([x + 380, yy + 85, x + 440, yy + 85], fill=(99, 102, 241), width=5)
+    im.save(p)
+    stamp(p, y)
+
+
 def binary(p: Path, size: int, y: int, header: bytes = b""):
     p.parent.mkdir(parents=True, exist_ok=True)
     with open(p, "wb") as fh:
@@ -247,6 +269,11 @@ def main():
     binary(models / "gguf/llama-3.1-8b-instruct-Q4_K_M.gguf", 300_000, 2025, b"GGUF")
     binary(models / "comfyui/sdxl_lora_produktfotos.safetensors", 120_000, 2025)
     text(lap / ".config/ollama_notes.txt", "ollama run llama3.1 – Modelle lokal, API key nicht nötig. LM Studio als Alternative.", 2025)
+
+    png_diagram(ws / "genai/architektur/RAG_Architektur.png", "RAG-Architektur GenAI-Plattform",
+                ["Dokumente", "Chunking", "Embeddings", "Vektor-DB Qdrant", "Retrieval", "Claude LLM"], 2026)
+    png_diagram(pc_c / "Pictures/Screenshots/Screenshot_Lieferantenportal.png", "oneSCM Lieferantenportal",
+                ["Bestellungen 128", "Liefertreue 96,4 %", "Offene Rechnungen 7", "Lieferant Nordwind", "Status: aktiv"], 2025)
 
     # ---------- Sonstiges ----------
     binary(lap / "Downloads/OllamaSetup.exe", 80_000, 2025, b"MZ")

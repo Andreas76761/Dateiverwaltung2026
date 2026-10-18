@@ -10,7 +10,7 @@ from pathlib import Path
 from ..config import get_settings
 from .filetype import IMAGE_EXTS, OFFICE_PAGED
 
-THUMB_WIDTH = 640
+THUMB_WIDTH = 900  # scharf genug für die Großansicht, klein genug für Listen
 
 
 def _office_to_pdf(path: str) -> Path | None:

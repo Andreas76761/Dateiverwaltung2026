@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Boxes, CloudUpload, Copy, FolderKanban, FolderTree, HardDrive, LayoutDashboard, Loader2, Moon, Settings as Cog, ShieldCheck, Sun } from "lucide-react";
+import { Boxes, CloudUpload, Copy, FolderKanban, FolderTree, HardDrive, LayoutDashboard, Loader2, Moon, PanelLeftClose, PanelLeftOpen, Settings as Cog, ShieldCheck, Sun } from "lucide-react";
 import { JobsProvider, ToastProvider, useJobs } from "./components/ui";
 import CopyPage from "./pages/CopyPage";
 import Dashboard from "./pages/Dashboard";
@@ -60,31 +60,54 @@ function Shell() {
   const go = (p: string) => { window.location.hash = `/${p}`; };
   const dark = theme === "dark" || (!theme && window.matchMedia("(prefers-color-scheme: dark)").matches);
   const flush = ["explorer", "proposal"].includes(route.page);
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem("fdv-nav-collapsed") === "1"; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("fdv-nav-collapsed", collapsed ? "1" : "0"); } catch { /* ignore */ }
+  }, [collapsed]);
+  // Tastenkürzel: Strg/Cmd + B klappt die Navigation ein/aus
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        setCollapsed((c) => !c);
+      }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
 
   return (
-    <div className="app">
+    <div className={`app ${collapsed ? "collapsed" : ""}`}>
       <aside className="side">
         <div className="brand">
           <div className="brand-logo"><FolderTree size={19} /></div>
-          <div><div className="brand-name">Future</div><div className="brand-sub">Dateiverwaltung</div></div>
+          <div className="brand-text"><div className="brand-name">Future</div><div className="brand-sub">Dateiverwaltung</div></div>
         </div>
         <nav className="nav">
           {NAV.map((n, i) =>
             "sec" in n ? <div key={i} className="nav-sec">{n.sec}</div> : (
-              <a key={n.id} className={route.raw === n.id || (route.page === n.id && !(n.id === "explorer" && route.params.get("dup"))) ? "active" : ""} onClick={() => go(n.id)}>
-                <n.icon size={17} /> {n.label}
+              <a key={n.id} className={route.raw === n.id || (route.page === n.id && !(n.id === "explorer" && route.params.get("dup"))) ? "active" : ""} onClick={() => go(n.id)} title={collapsed ? n.label : undefined}>
+                <n.icon size={17} className="nav-icon" /> <span className="nav-label">{n.label}</span>
                 {"step" in n && <span className="step">{n.step}</span>}
               </a>
             ),
           )}
         </nav>
         <div className="side-foot">
-          <div className="safe-pill"><ShieldCheck size={15} /> Löschschutz aktiv</div>
-          4 Computer · 6 Festplatten · Cloud<br />v1.0
+          <div className="safe-pill" title="Löschschutz aktiv"><ShieldCheck size={15} /> <span className="nav-label">Löschschutz aktiv</span></div>
+          <span className="nav-label">4 Computer · 6 Festplatten · Cloud<br />v1.0</span>
+          <button className="collapse-btn" onClick={() => setCollapsed(!collapsed)} title={collapsed ? "Navigation ausklappen (Strg+B)" : "Navigation einklappen (Strg+B)"}>
+            {collapsed ? <PanelLeftOpen size={17} /> : <><PanelLeftClose size={17} /> <span className="nav-label">Einklappen</span></>}
+          </button>
         </div>
       </aside>
       <main className="main">
         <header className="topbar">
+          <button className="btn ghost icon" onClick={() => setCollapsed(!collapsed)} title={collapsed ? "Navigation ausklappen (Strg+B)" : "Navigation einklappen (Strg+B)"}>
+            {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+          </button>
           <b style={{ fontSize: 15 }}>{NAV.find((n) => "id" in n && (n.id === route.raw || n.id === route.page)) && (NAV.find((n) => "id" in n && (n.id === route.raw || n.id === route.page)) as any).label}</b>
           <span className="spacer" />
           <JobIndicator />

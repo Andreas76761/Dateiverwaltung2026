@@ -97,7 +97,7 @@ backend/app
 frontend/                React + TypeScript + Vite
 ```
 
-Frontend-Ansichten: Übersicht (Pipeline, KPIs) · Explorer (Baum Computer › Festplatte › Ordner, Suche in Name/Inhalt/OCR/Labels, Filter nach Bereich, 50 Kategorien, Dateityp, Label, Speicherdatum, Duplikaten, Prüfstatus; Sortierung nach Wichtigkeit, Datum, Typ …; Liste/Galerie; Detail mit Miniaturen aller Seiten, Labels, OCR, Duplikaten, Zielpfad) · Vorschlag & Prüfung · Kopieren & Statistik · Quellen & Agenten · Programme & LLMs · Einstellungen.
+Frontend-Ansichten: Übersicht (Pipeline, KPIs) · Explorer (Baum Computer › Festplatte › Ordner, Suche in Name/Inhalt/OCR/Labels, Filter nach Bereich, 50 Kategorien, Dateityp, Label, Speicherdatum, Duplikaten, Prüfstatus; Sortierung nach Wichtigkeit, Datum, Typ …; Liste/Galerie/**Seiten** – in der Seitenansicht sind bei PDF, PPTX, PNG und JPEG alle Seiten direkt als Miniaturen sichtbar, Klick öffnet die Großansicht mit ←/→; Navigation und Ordnerbaum einklappbar (Strg+B); Detail mit Miniaturen aller Seiten, Labels, OCR, Duplikaten, Zielpfad) · Vorschlag & Prüfung · Kopieren & Statistik · Quellen & Agenten · Programme & LLMs · Einstellungen.
 
 ## Entwicklung
 

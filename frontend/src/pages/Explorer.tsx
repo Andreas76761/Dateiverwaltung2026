@@ -1,15 +1,56 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Cloud, Copy, Folder, FolderOpen, HardDrive, LayoutGrid, Laptop, List, Pin, Search, Usb, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Cloud, Copy, Folder, FolderOpen, GalleryHorizontal, HardDrive, Images, LayoutGrid, Laptop, List, PanelLeftClose, PanelLeftOpen, Pin, Search, Usb, X } from "lucide-react";
 import { get, qs, thumbUrl } from "../api";
 import FileDetail from "../components/FileDetail";
-import { FileIcon, FileThumbOrIcon, GroupBadge, Importance, Labels, ReviewBadge, useAsync, useJobs } from "../components/ui";
-import type { Computer, FileList } from "../types";
+import { FileIcon, FileThumbOrIcon, GroupBadge, Importance, Labels, PageViewer, ReviewBadge, useAsync, useJobs } from "../components/ui";
+import type { Computer, FileItem, FileList } from "../types";
+
+const PREVIEW_EXTS = ".pdf,.pptx,.ppt,.png,.jpg,.jpeg";
 import { fmtBytes, fmtDate, fmtNum, GROUPS } from "../util";
 
 interface Facets {
   categories: { value: string; grp: string; n: number }[];
   types: { value: string; n: number }[];
   labels: { value: string; n: number }[];
+}
+
+type View = "list" | "grid" | "pages";
+const PREVIEW_PAGES = 24; // so viele Seiten je Datei sofort, Rest per Klick
+
+function PageStrip({ f, selected, onOpen, onPage }: { f: FileItem; selected: boolean; onOpen: () => void; onPage: (p: number) => void }) {
+  const [all, setAll] = useState(false);
+  const n = all ? f.thumbs : Math.min(f.thumbs, PREVIEW_PAGES);
+  const wide = f.file_type === "Präsentation";
+  return (
+    <div className={`pv-file ${selected ? "sel" : ""}`}>
+      <div className="pv-head" onClick={onOpen}>
+        <FileIcon type={f.file_type} ext={f.ext} />
+        <div className="grow">
+          <div className="ellipsis" style={{ fontWeight: 600 }}>{f.name}</div>
+          <div className="faint ellipsis" style={{ fontSize: 11.5 }}>
+            {f.thumbs > 1 ? `${f.thumbs} Seiten · ` : f.thumbs === 1 ? "1 Seite · " : ""}{f.computer_name} · {f.volume_name} · {fmtDate(f.mtime)} · {fmtBytes(f.size)}
+          </div>
+        </div>
+        <GroupBadge group={f.group_name} />
+        {f.category && <span className="badge outline">{f.category}</span>}
+        {f.dup_count > 1 && <span className={`badge ${f.is_primary ? "warn" : "bad"}`}>{f.dup_count}×</span>}
+        <div style={{ width: 110 }}><Importance value={f.importance} /></div>
+      </div>
+      {f.thumbs > 0 ? (
+        <div className="pv-strip">
+          {Array.from({ length: n }, (_, i) => i + 1).map((p) => (
+            <div key={p} className={`pv-page ${wide ? "wide" : ""}`} onClick={() => onPage(p)} title={`Seite ${p}`}>
+              <img src={thumbUrl(f.id, p)} loading="lazy" alt={`Seite ${p}`} />
+              {f.thumbs > 1 && <span>{p}</span>}
+            </div>
+          ))}
+          {f.thumbs > n && <button className="btn sm pv-more" onClick={() => setAll(true)}>+ {f.thumbs - n} weitere Seiten</button>}
+        </div>
+      ) : (
+        <div className="faint" style={{ padding: "10px 12px", fontSize: 12.5 }}>Keine Miniaturansicht – Datei noch nicht analysiert oder Dateityp ohne Vorschau.</div>
+      )}
+    </div>
+  );
 }
 
 type Sel = { computer?: string; volume?: string; folder?: string };
@@ -81,9 +122,17 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
   const [dateTo, setDateTo] = useState("");
   const [sort, setSort] = useState("importance");
   const [order, setOrder] = useState<"asc" | "desc">("desc");
-  const [view, setView] = useState<"list" | "grid">(() => {
-    try { return (localStorage.getItem("fdv-view") as "list" | "grid") || "list"; } catch { return "list"; }
+  const [view, setView] = useState<View>(() => {
+    try { return (localStorage.getItem("fdv-view") as View) || "list"; } catch { return "list"; }
   });
+  const [previewOnly, setPreviewOnly] = useState(false);
+  const [showTree, setShowTree] = useState<boolean>(() => {
+    try { return localStorage.getItem("fdv-tree") !== "0"; } catch { return true; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("fdv-tree", showTree ? "1" : "0"); } catch { /* ignore */ }
+  }, [showTree]);
+  const [viewer, setViewer] = useState<{ id: number; name: string; pages: number; page: number } | null>(null);
   const [limit, setLimit] = useState(150);
   const [detail, setDetail] = useState<number | null>(params.get("file") ? Number(params.get("file")) : null);
   const [openComp, setOpenComp] = useState<Record<string, boolean>>({});
@@ -101,9 +150,11 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
   const facets = useAsync<Facets>(() => get("/api/facets"), [version, tick]);
   const query = useMemo(() => qs({
     q: qDebounced, computer: sel.computer, volume: sel.volume, folder: sel.folder, group: group === "(nicht analysiert)" ? undefined : group,
-    category, file_type: fileType, label, dup, review, date_from: dateFrom, date_to: dateTo, sort, order, limit,
+    category, file_type: fileType, label, dup, review, date_from: dateFrom, date_to: dateTo, sort, order,
     status: group === "(nicht analysiert)" ? "eingelesen" : undefined,
-  }), [qDebounced, sel, group, category, fileType, label, dup, review, dateFrom, dateTo, sort, order, limit]);
+    ext: previewOnly ? PREVIEW_EXTS : undefined,
+    limit,
+  }), [qDebounced, sel, group, category, fileType, label, dup, review, dateFrom, dateTo, sort, order, limit, previewOnly, view]);
   const list = useAsync<FileList>(() => get(`/api/files${query}`), [query, version, tick]);
 
   const setSortCol = (c: string) => {
@@ -115,8 +166,8 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
       <span className="row" style={{ gap: 3 }}>{children}{sort === c && (order === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}</span>
     </th>
   );
-  const anyFilter = group || category || fileType || label || dup || review || dateFrom || dateTo || qDebounced;
-  const reset = () => { setGroup(""); setCategory(""); setFileType(""); setLabel(""); setDup(""); setReview(""); setDateFrom(""); setDateTo(""); setQ(""); };
+  const anyFilter = previewOnly || group || category || fileType || label || dup || review || dateFrom || dateTo || qDebounced;
+  const reset = () => { setGroup(""); setCategory(""); setFileType(""); setLabel(""); setDup(""); setReview(""); setDateFrom(""); setDateTo(""); setQ(""); setPreviewOnly(false); };
   const items = list.data?.items ?? [];
   const compact = detail !== null;
   const selName = (() => {
@@ -132,8 +183,8 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
   })();
 
   return (
-    <div className={`explorer ${detail ? "with-detail" : ""}`}>
-      <div className="pane tree-pane">
+    <div className={`explorer ${detail ? "with-detail" : ""} ${showTree ? "" : "no-tree"}`}>
+      {showTree && <div className="pane tree-pane">
         <div className={`tree-item ${!sel.computer && !sel.volume ? "on" : ""}`} onClick={() => setSel({})}>
           <span className="chev" /><LayoutGrid size={14} /> <span>Alle Dateien</span>
         </div>
@@ -159,10 +210,13 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
         <div className={`tree-item ${dup === "ja" ? "on" : ""}`} onClick={() => setDup(dup === "ja" ? "" : "ja")}>
           <span className="chev" /><Copy size={14} /> Duplikate
         </div>
-      </div>
+      </div>}
 
       <div className="list-pane">
         <div className="toolbar">
+          <button className="btn icon" onClick={() => setShowTree(!showTree)} title={showTree ? "Ordnerbaum ausblenden" : "Ordnerbaum einblenden"}>
+            {showTree ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}
+          </button>
           <div className="search grow" style={{ maxWidth: 520 }}>
             <Search size={15} />
             <input className="input" placeholder="Suche in Name, Pfad, Inhalt, OCR-Text und Labels …" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -180,9 +234,13 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
           <div className="seg">
             <button className={view === "list" ? "on" : ""} onClick={() => setView("list")}><List size={14} /> Liste</button>
             <button className={view === "grid" ? "on" : ""} onClick={() => setView("grid")}><LayoutGrid size={14} /> Galerie</button>
+            <button className={view === "pages" ? "on" : ""} onClick={() => { setView("pages"); setPreviewOnly(true); }} title="Alle Seiten von PDF, PPTX, PNG, JPEG als Miniaturen"><GalleryHorizontal size={14} /> Seiten</button>
           </div>
         </div>
         <div className="filterbar">
+          <button className={`chip ${previewOnly ? "on" : ""}`} onClick={() => setPreviewOnly(!previewOnly)} title="Nur PDF, PPTX, PNG und JPEG">
+            <Images size={12} /> PDF · PPTX · PNG · JPEG
+          </button>
           {GROUPS.map((g) => (
             <button key={g} className={`chip ${group === g ? "on" : ""}`} onClick={() => setGroup(group === g ? "" : g)}>
               <span className={`dot g-${g === "Sonstiges" ? "sonst" : g.toLowerCase()}`} />{g}
@@ -220,7 +278,14 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
         </div>
 
         <div className="list-scroll">
-          {view === "list" ? (
+          {view === "pages" ? (
+            <div className="pages-view">
+              {items.map((f) => (
+                <PageStrip key={f.id} f={f} selected={detail === f.id} onOpen={() => setDetail(f.id)}
+                  onPage={(p) => setViewer({ id: f.id, name: f.name, pages: f.thumbs, page: p })} />
+              ))}
+            </div>
+          ) : view === "list" ? (
             <table className="table" style={{ tableLayout: "fixed" }}>
               <thead>
                 <tr>
@@ -289,6 +354,7 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
         </div>
       </div>
 
+      {viewer && <PageViewer fileId={viewer.id} name={viewer.name} pages={viewer.pages} start={viewer.page} onClose={() => setViewer(null)} />}
       {detail && <FileDetail id={detail} onClose={() => setDetail(null)} onChanged={() => setTick((t) => t + 1)} />}
     </div>
   );
