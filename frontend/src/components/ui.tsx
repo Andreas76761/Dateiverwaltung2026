@@ -72,6 +72,27 @@ export function Labels({ labels, max = 4, nowrap = false }: { labels: string[]; 
   );
 }
 
+export const SIM_TEXT: Record<string, { label: string; hint: string }> = {
+  Versionen: { label: "Versionen", hint: "Mehrere Fassungen derselben Datei (z. B. _v2, _final, „(1)“)" },
+  Formate: { label: "Formate", hint: "Gleicher Inhalt in anderem Format, z. B. als PDF und als DOCX" },
+  Inhalt: { label: "Ähnlicher Inhalt", hint: "Weitgehend gleicher Text unter anderem Namen" },
+  Fotos: { label: "Ähnliche Fotos", hint: "Gleiches Motiv – bearbeitet, verkleinert oder neu komprimiert" },
+};
+
+/** Kennzeichen für ähnliche Dateien (≈) – mit Rolle der Datei in ihrer Gruppe. */
+export function SimBadge({ kind, count, best, small }: { kind: string | null; count: number; best: number; small?: boolean }) {
+  if (!kind) return null;
+  const role = kind === "Versionen" ? (best === 1 ? "neueste" : best === 2 ? "neueste · anderes Format" : "ältere Version")
+    : kind === "Fotos" ? (best === 1 ? "beste Qualität" : "ähnlich") : best === 1 ? "empfohlen" : "ähnlich";
+  const cls = kind === "Versionen" && best === 0 ? "warn" : "sim";
+  return (
+    <span className={`badge ${cls}`} style={small ? { fontSize: 10, padding: "0 6px" } : undefined}
+      title={`${SIM_TEXT[kind]?.hint ?? kind} · ${count} Dateien · ${role}`}>
+      ≈ {count} {small ? "" : SIM_TEXT[kind]?.label ?? kind}
+    </span>
+  );
+}
+
 export function OnlineBadge({ small }: { small?: boolean }) {
   return (
     <span className="badge g-beruf" style={small ? { fontSize: 10, padding: "0 6px" } : undefined}

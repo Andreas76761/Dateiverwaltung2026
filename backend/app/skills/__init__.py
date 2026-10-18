@@ -12,6 +12,7 @@ SKILLS = [
     {"id": "thumbnails", "name": "Miniaturansichten", "beschreibung": "Alle Seiten von PDF/PPTX/DOCX/XLSX (via LibreOffice) und Bilder", "agent": "Analyse"},
     {"id": "classify", "name": "LLM-Klassifikation", "beschreibung": "50 Kategorien → Privat / Beruf / GenAI / Sonstiges, Zusammenfassung", "agent": "Analyse"},
     {"id": "labels", "name": "Labels", "beschreibung": "Wichtige Labels (Vertrag, Frist, Steuer, …) per LLM + Regeln", "agent": "Analyse"},
+    {"id": "similarity", "name": "Ähnliche Dateien", "beschreibung": "Ähnliche Fotos (pHash), Versionen (Angebot_v2/_final) und gleicher Inhalt als PDF/DOCX (MinHash)", "agent": "Ähnlichkeit"},
     {"id": "importance", "name": "Wichtigkeit", "beschreibung": "Score 0–100 aus Kategorie, Labels, Aktualität, Duplikaten", "agent": "Analyse"},
     {"id": "pathsuggest", "name": "Pfadvorschlag", "beschreibung": "Neue Ordnerstruktur inkl. Unterordner – nur virtuell", "agent": "Organisation"},
     {"id": "safecopy", "name": "Sichere Kopie", "beschreibung": "Kopie mit SHA-256-Prüfung, nie überschreiben, nie löschen", "agent": "Kopie"},

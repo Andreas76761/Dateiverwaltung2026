@@ -55,7 +55,8 @@ export default function Dashboard({ go }: { go: (page: string) => void }) {
       <div className="grid g4">
         <div className="card kpi"><div className="k-label"><FileSearch size={14} /> Dateien erfasst</div><div className="k-val">{fmtNum(t.files)}</div><div className="k-sub">{fmtBytes(t.bytes)}{t.online_only ? ` · ☁ ${fmtNum(t.online_only)} nur online` : ""}</div></div>
         <div className="card kpi"><div className="k-label"><Sparkles size={14} /> Analysiert</div><div className="k-val">{fmtNum(t.analyzed)}</div><div className="k-sub">{t.files ? Math.round((t.analyzed / t.files) * 100) : 0} % · {fmtNum(s.thumbnails)} Miniaturen · {fmtNum(t.ocr)} OCR</div></div>
-        <div className="card kpi"><div className="k-label"><Copy size={14} /> Duplikate</div><div className="k-val">{fmtNum(t.dup_files)}</div><div className="k-sub">{fmtNum(t.dup_groups)} Gruppen · {fmtBytes(t.dup_bytes)} doppelt</div></div>
+        <div className="card kpi"><div className="k-label"><Copy size={14} /> Duplikate</div><div className="k-val">{fmtNum(t.dup_files)}</div><div className="k-sub">{fmtNum(t.dup_groups)} Gruppen · {fmtBytes(t.dup_bytes)} doppelt</div>
+          {t.sim_groups > 0 && <div className="k-sub"><a style={{ cursor: "pointer" }} onClick={() => go("similar")}>≈ {fmtNum(t.sim_groups)} Gruppen ähnlicher Dateien{t.older_versions ? ` · ${fmtNum(t.older_versions)} ältere Versionen` : ""}</a></div>}</div>
         <div className="card kpi"><div className="k-label"><CheckCircle2 size={14} /> Freigegeben / kopiert</div><div className="k-val">{fmtNum(t.approved)} <span className="faint" style={{ fontSize: 16 }}>/ {fmtNum(s.copies?.copied)}</span></div><div className="k-sub">{fmtNum(t.rejected)} abgelehnt · {fmtBytes(s.copies?.bytes)} kopiert</div></div>
       </div>
 
@@ -88,6 +89,7 @@ export default function Dashboard({ go }: { go: (page: string) => void }) {
                   {j?.kind === "scan" && <><span>{fmtNum(j.stats.dateien)} Dateien</span><span>{fmtNum(j.stats.duplikatgruppen)} Duplikatgruppen</span></>}
                   {j?.kind === "analyze" && <><span>{fmtNum(j.stats.analysiert)} analysiert</span><span>{fmtNum(j.stats.miniaturen)} Seiten</span><span>{fmtNum(j.stats.ocr)} OCR</span><span>LLM: {j.stats.provider}</span>
                     {j.stats.llm > 0 && <span>{fmtNum(j.stats.llm)}× Claude</span>}
+                    {j.stats["ähnlich"]?.ähnlich_gruppen > 0 && <span>≈ {fmtNum(j.stats["ähnlich"].ähnlich_gruppen)} ähnliche Gruppen</span>}
                     {j.stats.nur_regeln > 0 && <span>{fmtNum(j.stats.nur_regeln)}× offline sicher</span>}
                     {j.stats.kosten_usd > 0 && <span><b>{j.stats.kosten_usd.toLocaleString("de-DE", { maximumFractionDigits: 3 })} $</b></span>}
                     {j.stats.kostenlimit_erreicht && <span style={{ color: "var(--warn)" }}>Kostenlimit erreicht</span>}</>}

@@ -30,6 +30,19 @@ Optionale Systemprogramme: **Tesseract** (OCR, Sprachpaket `deu`) und **LibreOff
 
 OneDrive/SharePoint (Microsoft Graph) und Google Drive lassen sich zusätzlich direkt anbinden: Einlesen **aller** Cloud-Dateien ohne Download, Duplikate zwischen lokal und Cloud, Deckblatt-Miniaturen von der Cloud und in Schritt 4 **serverseitige Kopien** in einen neuen Cloud-Ordner. Der Cloud-Client kann technisch nur lesen, Ordner anlegen und kopieren – nie löschen, verschieben oder überschreiben. Einrichtung: **[docs/CLOUD-API.md](docs/CLOUD-API.md)**.
 
+## Ähnliche Dateien (nicht identisch)
+
+Zusätzlich zu exakten Duplikaten (gleicher SHA-256) findet die App **zusammengehörige, aber unterschiedliche** Dateien – automatisch am Ende jeder Analyse oder über „Ähnliche Dateien › Neu suchen“:
+
+| Art | Erkennung | Beispiel |
+|---|---|---|
+| **Versionen** | Dateiname ohne Versionsangaben (`_v2`, `final`, `Entwurf`, `(1)`, `Kopie von` …), bestätigt über den Textinhalt | `Angebot_v1.docx` · `Angebot_v2.docx` · `Angebot_final.pdf` |
+| **Formate** | gleicher Text (MinHash ≥ 80 %), andere Endung – auch bei anderem Dateinamen | `Konzept.docx` ↔ `Export_Konzept.pdf` |
+| **Ähnlicher Inhalt** | Text zu ≥ 60 % gleich | überarbeitete Fassung unter neuem Namen |
+| **Ähnliche Fotos** | Bild-Fingerabdruck (pHash) – robust gegen Verkleinern, Bearbeiten, Neu-Komprimieren | `IMG_4203.jpg` ↔ `IMG_4203_bearbeitet.jpg` ↔ `Strand_klein.png` |
+
+Je Gruppe wird eine Empfehlung markiert (★ höchste Versionsangabe bzw. neuestes Datum, bei Fotos die größte Datei); ältere Versionen erhalten das Label „Ältere Version“ und rutschen in der Wichtigkeit nach unten. Verschiedene Dokumente mit ähnlichem Namen (`Rechnung_045` / `Rechnung_046`, Protokolle mit anderem Datum) und gleichnamige Dateien mit völlig anderem Inhalt werden bewusst **nicht** zusammengefasst. In Schritt 4 lassen sich ältere Versionen auf Wunsch auslassen („Nur neueste Versionen kopieren“). Es wird nichts gelöscht oder zusammengeführt. Der Vergleich läuft über Kandidaten-Bänder (LSH) und schafft im Lasttest 100.000 Dateien in wenigen Sekunden.
+
 ## Probelauf auf einem echten Computer
 
 Vor dem echten Einsatz: **[docs/PROBELAUF.md](docs/PROBELAUF.md)** – ein Ordner, Dateilimit, Trockenlauf, Vorher/Nachher-Nachweis, dass nichts verändert wurde, und ein Bericht zum Zurückmelden:
@@ -124,7 +137,7 @@ backend/app
 frontend/                React + TypeScript + Vite
 ```
 
-Frontend-Ansichten: Übersicht (Pipeline, KPIs) · Explorer (Baum Computer › Festplatte › Ordner, Suche in Name/Inhalt/OCR/Labels, Filter nach Bereich, 50 Kategorien, Dateityp, Label, Speicherdatum, Duplikaten, Prüfstatus; Sortierung nach Wichtigkeit, Datum, Typ …; Liste/Galerie/**Seiten** – in der Seitenansicht sind bei PDF, PPTX, DOCX, XLSX (ein Bild je Tabellenblatt), PNG und JPEG alle Seiten direkt als Miniaturen sichtbar, bei **Videos** Standbilder über die Laufzeit (mit Zeitmarke, Player im Detail) und bei **E-Mails** (.eml, Outlook .msg) die Mail-Seite plus alle Seiten der Anhänge, Klick öffnet die Großansicht mit ←/→; Navigation und Ordnerbaum einklappbar (Strg+B); Detail mit Miniaturen aller Seiten, Labels, OCR, Duplikaten, Zielpfad) · Vorschlag & Prüfung · Kopieren & Statistik · Quellen & Agenten · Programme & LLMs · Einstellungen.
+Frontend-Ansichten: Übersicht (Pipeline, KPIs) · Explorer (Baum Computer › Festplatte › Ordner, Suche in Name/Inhalt/OCR/Labels, Filter nach Bereich, 50 Kategorien, Dateityp, Label, Speicherdatum, Duplikaten, Prüfstatus; Sortierung nach Wichtigkeit, Datum, Typ …; Liste/Galerie/**Seiten** – in der Seitenansicht sind bei PDF, PPTX, DOCX, XLSX (ein Bild je Tabellenblatt), PNG und JPEG alle Seiten direkt als Miniaturen sichtbar, bei **Videos** Standbilder über die Laufzeit (mit Zeitmarke, Player im Detail) und bei **E-Mails** (.eml, Outlook .msg) die Mail-Seite plus alle Seiten der Anhänge, Klick öffnet die Großansicht mit ←/→; Navigation und Ordnerbaum einklappbar (Strg+B); Detail mit Miniaturen aller Seiten, Labels, OCR, Duplikaten, ähnlichen Dateien, Zielpfad) · Ähnliche Dateien (Gruppen mit Vorschau, Empfehlung ★) · Vorschlag & Prüfung · Kopieren & Statistik · Quellen & Agenten · Programme & LLMs · Einstellungen.
 
 ## Entwicklung
 

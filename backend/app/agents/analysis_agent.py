@@ -394,5 +394,9 @@ def run(job: Job, params: dict) -> dict:
     job.update(progress=total, message=f"{total}/{total} analysiert", **stats)
     from .scan_agent import refresh_dup_groups
     stats.update(refresh_dup_groups())
+    if not job.cancelled:  # 4. Ähnliche Dateien (Fotos, Versionen, PDF ↔ DOCX)
+        from . import similarity_agent
+        job.update(message="Ähnliche Dateien werden gesucht …", **stats)
+        stats["ähnlich"] = similarity_agent.refresh()
     stats["cache"] = thumbcache.enforce_budget()
     return stats

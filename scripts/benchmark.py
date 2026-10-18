@@ -118,6 +118,10 @@ computers:
 
     timed("Einfügen", fill)
     timed("Suchindex aufbauen", db.fts_rebuild)
+    from app.agents import similarity_agent
+    _, t_sim = timed("Ähnliche Dateien (Fingerabdrücke + Gruppen)", similarity_agent.refresh)
+    print(f"     → {a.rows / t_sim:,.0f} Dateien/s".replace(",", "."))
+    _, _ = timed("Ähnliche Dateien erneut (nur Gruppen)", similarity_agent.refresh)
 
     from fastapi.testclient import TestClient
     from app.main import app

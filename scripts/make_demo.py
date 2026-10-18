@@ -370,6 +370,40 @@ def main():
         stamp(ph, 2025, 3)
     text(nc / "Dokumente/Notizen_lokal.md", "# Notizen\nDiese Datei ist lokal synchronisiert.", 2025)
 
+    # ---------- Ähnliche Dateien: Versionen, gleiches Dokument als PDF/DOCX, bearbeitete Fotos ----------
+    ang = ["Angebot Nr. A-2025-117 für die Muster AG: Lieferung und Montage von Schwerlastregalen für das Lager Süd.",
+           "Position 1: 48 Regalfelder Schwerlast, Fachlast 1.000 kg, verzinkt, inklusive Anfahrschutz und Beschriftung.",
+           "Position 2: Montage vor Ort durch zwei Monteure an drei Arbeitstagen, inklusive Abnahmeprotokoll nach DIN EN 15635.",
+           "Position 3: Entsorgung des Verpackungsmaterials und Einweisung der Lagermitarbeiter in die Regalinspektion.",
+           "Zahlungsbedingungen: 30 Tage netto, Lieferzeit sechs Wochen nach Auftragseingang. Das Angebot ist bis 31.12.2025 gültig."]
+    arb = pc_c / "Documents/Arbeit/Angebote"
+    word(arb / "Angebot_Lagerregale_v1.docx", "Angebot Lagerregale", ang + ["Gesamtpreis netto: 61.200,00 EUR."], 2025)
+    stamp(arb / "Angebot_Lagerregale_v1.docx", 2025, 9, 2)
+    ang2 = ang[:3] + [ang[3] + " Zusätzlich: jährliche Regalprüfung im ersten Jahr kostenlos."] + ang[4:]
+    word(lap / "Documents/Angebote/Angebot_Lagerregale_v2.docx", "Angebot Lagerregale", ang2 + ["Gesamtpreis netto: 58.900,00 EUR (3 % Rabatt)."], 2025)
+    stamp(lap / "Documents/Angebote/Angebot_Lagerregale_v2.docx", 2025, 9, 20)
+    pdf(od / "Arbeit/Angebote/Angebot_Lagerregale_final.pdf", "Angebot Lagerregale",
+        ["\n".join(ang2 + ["Gesamtpreis netto: 58.900,00 EUR (3 % Rabatt).", "Unterschrift: Andreas, 01.10.2025"])], 2025, 10)
+    dsk = ["Datenschutzkonzept für die GenAI-Plattform der Muster AG nach DSGVO und AI Act.",
+           "Zweck: Nutzung von Sprachmodellen für Angebotserstellung, Vertragsprüfung und Disposition.",
+           "Verarbeitete Daten: Geschäftsdokumente ohne Gesundheitsdaten; personenbezogene Daten werden vor der Übertragung pseudonymisiert.",
+           "Technische Maßnahmen: Verschlüsselung, Protokollierung aller Anfragen, Löschkonzept nach 30 Tagen, Zugriff nur über SSO.",
+           "Organisatorische Maßnahmen: Schulung aller Nutzer, Freigabe neuer Anwendungsfälle durch den Datenschutzbeauftragten."]
+    word(ws / "genai/governance/Datenschutzkonzept_GenAI.docx", "Datenschutzkonzept GenAI", dsk, 2026)
+    pdf(gd / "Freigaben/DSB_Export_Konzept_Plattform.pdf", "Datenschutzkonzept GenAI", ["\n".join(dsk)], 2026, 6)
+    word(pc_c / "Documents/Arbeit/Projektplan_Phoenix_v2.docx", "Projektplan Phoenix",
+         ["Meilensteine, Ressourcen und Risiken des Projekts Phoenix – Stand Version 2."], 2025)
+    # bearbeitete/verkleinerte Fotos (andere Prüfsumme, gleiches Motiv)
+    src = mac / "Pictures/Urlaub_Portugal_2025/IMG_4203.jpg"
+    with Image.open(src) as im:
+        dst = lap / "Pictures/Portugal_bearbeitet/IMG_4203_bearbeitet.jpg"
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        im.resize((1440, 960)).point(lambda v: min(255, int(v * 1.08))).save(dst, quality=92)
+        stamp(dst, 2025, 8)
+        (gd / "Fotos").mkdir(parents=True, exist_ok=True)
+        im.resize((480, 320)).save(gd / "Fotos/Strand_Lagos_klein.png")
+        stamp(gd / "Fotos/Strand_Lagos_klein.png", 2025, 9)
+
     # ---------- Sonstiges ----------
     binary(lap / "Downloads/OllamaSetup.exe", 80_000, 2025, b"MZ")
     binary(pc_c / "Downloads/vlc-3.0.20-win64.msi", 60_000, 2024)

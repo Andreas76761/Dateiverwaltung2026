@@ -10,6 +10,7 @@ export default function CopyPage({ go }: { go: (p: string) => void }) {
   const toast = useToast();
   const [inclDup, setInclDup] = useState(false);
   const [dlOnline, setDlOnline] = useState(false);
+  const [skipOlder, setSkipOlder] = useState(false);
   const [jobSel, setJobSel] = useState<number | null>(null);
   const preview = useAsync<any>(() => get(`/api/copy/preview${qs({ include_duplicates: inclDup })}`), [inclDup, version]);
   const copyJobs = jobs.filter((j) => j.kind === "copy");
@@ -19,9 +20,10 @@ export default function CopyPage({ go }: { go: (p: string) => void }) {
   const p = preview.data;
 
   const start = async (dry: boolean) => {
-    if (!dry && !window.confirm(`${p?.n} Dateien (${fmtBytes(p?.bytes)}) werden nach\n${p?.target_root}\nkopiert. Originale bleiben unverändert. Fortfahren?`)) return;
+    const n = (p?.n ?? 0) - (skipOlder ? p?.older_versions ?? 0 : 0);
+    if (!dry && !window.confirm(`${n} Dateien werden nach\n${p?.target_root}\nkopiert. Originale bleiben unverändert. Fortfahren?`)) return;
     try {
-      const r = await post<{ job_id: number }>("/api/pipeline/copy", { include_duplicates: inclDup, dry_run: dry, download_online_only: dlOnline });
+      const r = await post<{ job_id: number }>("/api/pipeline/copy", { include_duplicates: inclDup, dry_run: dry, download_online_only: dlOnline, skip_older_versions: skipOlder });
       setJobSel(r.job_id);
       refresh();
       toast(dry ? "Trockenlauf gestartet" : "Kopiervorgang gestartet");
@@ -57,6 +59,12 @@ export default function CopyPage({ go }: { go: (p: string) => void }) {
               <div className="faint" style={{ fontSize: 12 }}>Ziel:</div>
               <div className="pathbox new">{p.target_root}</div>
               <label className="switch"><input type="checkbox" checked={inclDup} onChange={(e) => setInclDup(e.target.checked)} /> Auch überzählige Duplikate kopieren</label>
+              {p.older_versions > 0 && (
+                <label className="switch" title="Erkannte ältere Versionen (z. B. Angebot_v1, wenn es Angebot_final gibt) bleiben im Original erhalten, werden aber nicht in die neue Struktur kopiert">
+                  <input type="checkbox" checked={skipOlder} onChange={(e) => setSkipOlder(e.target.checked)} /> Nur neueste Versionen kopieren
+                  <span className="faint">({fmtNum(p.older_versions)} ältere · {fmtBytes(p.older_bytes)})</span>
+                </label>
+              )}
               {p.online_only > 0 && (
                 <div className="callout" style={{ fontSize: 12.5, flexDirection: "column", gap: 6 }}>
                   <span>☁ <b>{fmtNum(p.online_only)}</b> freigegebene Dateien ({fmtBytes(p.online_bytes)}) liegen nur online. Sie werden standardmäßig <b>übersprungen</b>, weil das Kopieren den Download auslöst.</span>
@@ -89,7 +97,7 @@ export default function CopyPage({ go }: { go: (p: string) => void }) {
               {shownJob.status === "läuft" && <div className="progress"><div style={{ width: `${shownJob.total ? (shownJob.progress / shownJob.total) * 100 : 0}%` }} /></div>}
               <div className="grid g4" style={{ gap: 10 }}>
                 <div className="card kpi" style={{ boxShadow: "none" }}><div className="k-label">Kopiert</div><div className="k-val" style={{ color: "var(--ok)" }}>{fmtNum(st.kopiert)}</div><div className="k-sub">{fmtBytes(st.bytes)}</div></div>
-                <div className="card kpi" style={{ boxShadow: "none" }}><div className="k-label">Übersprungen</div><div className="k-val">{fmtNum(st["übersprungen"])}</div><div className="k-sub">bereits identisch im Ziel</div></div>
+                <div className="card kpi" style={{ boxShadow: "none" }}><div className="k-label">Übersprungen</div><div className="k-val">{fmtNum(st["übersprungen"])}</div><div className="k-sub">bereits identisch im Ziel{st["ältere_versionen_ausgelassen"] ? ` · ≈ ${fmtNum(st["ältere_versionen_ausgelassen"])} ältere Versionen ausgelassen` : ""}</div></div>
                 <div className="card kpi" style={{ boxShadow: "none" }}><div className="k-label">An Agenten</div><div className="k-val">{fmtNum(st["an_agent_übergeben"])}</div><div className="k-sub">andere Computer{st.nur_online ? ` · ☁ ${fmtNum(st.nur_online)} nur online übersprungen` : ""}{st.cloud_serverseitig ? ` · ☁ ${fmtNum(st.cloud_serverseitig)} serverseitig in der Cloud kopiert` : ""}</div></div>
                 <div className="card kpi" style={{ boxShadow: "none" }}><div className="k-label">Fehler</div><div className="k-val" style={{ color: st.fehler ? "var(--bad)" : undefined }}>{fmtNum(st.fehler)}</div><div className="k-sub">{st.trockenlauf ? "Trockenlauf" : `von ${fmtNum(st.geplant)} geplant`}</div></div>
               </div>

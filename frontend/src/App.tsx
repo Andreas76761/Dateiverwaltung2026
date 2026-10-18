@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Boxes, CloudUpload, Copy, FolderKanban, FolderTree, HardDrive, LayoutDashboard, Loader2, Moon, PanelLeftClose, PanelLeftOpen, Settings as Cog, ShieldCheck, Sun } from "lucide-react";
+import { Boxes, CloudUpload, Copy, FolderKanban, FolderTree, HardDrive, Layers, LayoutDashboard, Loader2, Moon, PanelLeftClose, PanelLeftOpen, Settings as Cog, ShieldCheck, Sun } from "lucide-react";
 import { JobsProvider, ToastProvider, useJobs } from "./components/ui";
 import CopyPage from "./pages/CopyPage";
 import Dashboard from "./pages/Dashboard";
@@ -7,6 +7,7 @@ import Explorer from "./pages/Explorer";
 import Programs from "./pages/Programs";
 import Proposal from "./pages/Proposal";
 import Settings from "./pages/Settings";
+import Similar from "./pages/Similar";
 import Sources from "./pages/Sources";
 import { JOB_LABEL } from "./util";
 
@@ -15,6 +16,7 @@ const NAV = [
   { id: "dashboard", label: "Übersicht", icon: LayoutDashboard },
   { id: "explorer", label: "Explorer", icon: FolderKanban },
   { id: "explorer?dup=ja", label: "Duplikate", icon: Copy },
+  { id: "similar", label: "Ähnliche Dateien", icon: Layers },
   { sec: "Neuordnung" },
   { id: "proposal", label: "Vorschlag & Prüfung", icon: FolderTree, step: 3 },
   { id: "copy", label: "Kopieren & Statistik", icon: CloudUpload, step: 4 },
@@ -116,6 +118,7 @@ function Shell() {
         <div className={`content ${flush ? "flush" : ""}`}>
           {route.page === "dashboard" && <Dashboard go={go} />}
           {route.page === "explorer" && <Explorer key={route.raw} params={route.params} />}
+          {route.page === "similar" && <Similar key={route.raw} params={route.params} />}
           {route.page === "proposal" && <Proposal />}
           {route.page === "copy" && <CopyPage go={go} />}
           {route.page === "sources" && <Sources />}

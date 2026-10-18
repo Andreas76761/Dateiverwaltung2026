@@ -37,6 +37,9 @@ def score(cat: Category, labels: set[str], file_type: str, mtime: str | None, du
     if dup_count > 1 and not is_primary:
         s -= 15
         reasons.append("Duplikat (−15)")
+    if "Ältere Version" in labels:
+        s -= 10
+        reasons.append("ältere Version (−10)")
     if pinned:
         s += 25
         reasons.append("angeheftet (+25)")

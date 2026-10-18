@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from .. import db, jobs
-from ..agents import analysis_agent, copy_agent, inventory_agent, organizer_agent, scan_agent
+from ..agents import analysis_agent, copy_agent, inventory_agent, organizer_agent, scan_agent, similarity_agent
 from ..config import get_settings
 from ..llm import costs
 from ..safety import sanitize_rel
@@ -33,6 +33,7 @@ class AnalyzeIn(BaseModel):
 class CopyIn(BaseModel):
     include_duplicates: bool = False
     download_online_only: bool = False  # Nur-online-Dateien herunterladen und kopieren
+    skip_older_versions: bool = False   # bei erkannten Versionen nur die neueste kopieren
     dry_run: bool = False
     file_ids: list[int] = []
 
@@ -84,6 +85,16 @@ def start_copy(body: CopyIn):
     return {"job_id": jobs.start("copy", copy_agent.run, body.model_dump())}
 
 
+class SimilarIn(BaseModel):
+    force: bool = False                 # alle Fingerabdrücke neu berechnen
+
+
+@router.post("/pipeline/similar")
+def start_similar(body: SimilarIn):
+    """Ähnliche Dateien suchen (läuft auch automatisch am Ende jeder Analyse)."""
+    return {"job_id": jobs.start("similar", similarity_agent.run, body.model_dump())}
+
+
 @router.post("/pipeline/inventory")
 def start_inventory():
     return {"job_id": jobs.start("inventory", inventory_agent.run, {})}
@@ -132,7 +143,10 @@ def _stats():
                    COALESCE(SUM(CASE WHEN dup_count>1 AND is_primary=0 THEN size END),0) dup_bytes,
                    SUM(review_status='freigegeben') approved, SUM(review_status='abgelehnt') rejected,
                    SUM(ocr_text IS NOT NULL) ocr, COUNT(DISTINCT dup_group) dup_groups,
-                   SUM(online_only) online_only, COALESCE(SUM(CASE WHEN online_only=1 THEN size END),0) online_bytes
+                   SUM(online_only) online_only, COALESCE(SUM(CASE WHEN online_only=1 THEN size END),0) online_bytes,
+                   COUNT(DISTINCT sim_group) sim_groups, SUM(sim_group IS NOT NULL) sim_files,
+                   SUM(sim_kind='Versionen' AND sim_best=0) older_versions,
+                   COALESCE(SUM(CASE WHEN sim_kind='Versionen' AND sim_best=0 THEN size END),0) older_bytes
                    FROM files WHERE {w}""")
     return {
         "totals": t,
@@ -150,6 +164,7 @@ def _stats():
             f"""SELECT v.id, v.name, v.kind, v.computer_id, v.path, v.total_bytes, v.free_bytes, v.last_scan,
                 COUNT(f.id) n, COALESCE(SUM(f.size),0) bytes FROM volumes v LEFT JOIN files f ON f.volume_id=v.id AND f.{w}
                 GROUP BY v.id ORDER BY v.computer_id, v.name"""),
+        "similar": db.query(f"SELECT sim_kind k, COUNT(DISTINCT sim_group) groups, COUNT(*) n FROM files WHERE {w} AND sim_group IS NOT NULL GROUP BY 1"),
         "importance": db.query(f"SELECT (importance/10)*10 k, COUNT(*) n FROM files WHERE {w} AND status='analysiert' GROUP BY 1 ORDER BY 1"),
         "top_important": db.query(f"SELECT id, name, category, group_name, importance, computer_id FROM files WHERE {w} AND is_primary=1 ORDER BY importance DESC LIMIT 8"),
         "copies": db.one("SELECT COUNT(*) ops, SUM(status='kopiert') copied, SUM(status='übersprungen') skipped, SUM(status='fehler') errors, SUM(status='geplant') planned, COALESCE(SUM(bytes),0) bytes FROM copy_ops"),
@@ -187,7 +202,8 @@ def proposal_files(folder: str = "", include_duplicates: bool = False, recursive
     rows = db.query(
         f"""SELECT f.id, f.name, f.path, f.computer_id, c.name computer_name, v.name volume_name, f.file_type, f.size, f.mtime,
             f.category, f.group_name, f.importance, f.confidence, f.suggested_path, f.final_path, {p} target, f.review_status,
-            f.dup_count, f.is_primary, f.summary, (SELECT COUNT(*) FROM thumbnails t WHERE t.file_id=f.id) thumbs,
+            f.dup_count, f.is_primary, f.summary, f.sim_kind, f.sim_count, f.sim_best,
+            (SELECT COUNT(*) FROM thumbnails t WHERE t.file_id=f.id) thumbs,
             (SELECT group_concat(label, '|') FROM labels l WHERE l.file_id=f.id) labels
             FROM files f JOIN computers c ON c.id=f.computer_id JOIN volumes v ON v.id=f.volume_id
             WHERE {' AND '.join(where)} ORDER BY f.importance DESC LIMIT ?""", [*args, limit])
@@ -286,4 +302,7 @@ def copy_preview(include_duplicates: bool = False):
                          WHERE review_status='freigegeben' AND missing=0{extra} GROUP BY 1""")
     by_computer = db.query(f"""SELECT computer_id k, COUNT(*) n, COALESCE(SUM(size),0) bytes FROM files
                          WHERE review_status='freigegeben' AND missing=0{extra} GROUP BY 1""")
-    return {**t, "by_group": groups, "by_computer": by_computer, "target_root": get_settings().target_root}
+    older = db.one(f"""SELECT COUNT(*) n, COALESCE(SUM(size),0) bytes FROM files WHERE review_status='freigegeben' AND missing=0{extra}
+                       AND sim_kind='Versionen' AND sim_best=0""")
+    return {**t, "by_group": groups, "by_computer": by_computer, "target_root": get_settings().target_root,
+            "older_versions": older["n"], "older_bytes": older["bytes"]}

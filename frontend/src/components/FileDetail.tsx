@@ -3,13 +3,13 @@ import { ArrowDown, Copy, ExternalLink, Pin, PinOff, Plus, ScanText, Sparkles, X
 import { get, post, rawUrl, thumbUrl } from "../api";
 import type { FileDetail as FD } from "../types";
 import { fmtBytes, fmtDate, shortLabel } from "../util";
-import { FileIcon, GroupBadge, Importance, PageViewer, ReviewBadge, useToast } from "./ui";
+import { FileIcon, FileThumbOrIcon, GroupBadge, Importance, PageViewer, ReviewBadge, SIM_TEXT, SimBadge, useToast } from "./ui";
 
 interface Cat { id: string; name: string; group: string }
 
-export default function FileDetail({ id, onClose, onChanged }: { id: number; onClose: () => void; onChanged?: () => void }) {
+export default function FileDetail({ id, onClose, onChanged, onOpen }: { id: number; onClose: () => void; onChanged?: () => void; onOpen?: (id: number) => void }) {
   const [f, setF] = useState<FD>();
-  const [tab, setTab] = useState<"seiten" | "inhalt" | "ocr" | "duplikate">("seiten");
+  const [tab, setTab] = useState<"seiten" | "inhalt" | "ocr" | "duplikate" | "aehnlich">("seiten");
   const [viewer, setViewer] = useState<number | null>(null);
   const [newLabel, setNewLabel] = useState("");
   const [cats, setCats] = useState<Cat[]>([]);
@@ -89,6 +89,7 @@ export default function FileDetail({ id, onClose, onChanged }: { id: number; onC
             {f.category && <span className="badge outline">{f.category}</span>}
             <ReviewBadge status={f.review_status} />
             {f.dup_count > 1 && <span className={`badge ${f.is_primary ? "warn" : "bad"}`}><Copy size={11} /> {f.is_primary ? "Original" : "Duplikat"} · {f.dup_count}×</span>}
+            {f.sim_kind && <span style={{ cursor: "pointer" }} onClick={() => setTab("aehnlich")}><SimBadge kind={f.sim_kind} count={f.sim_count} best={f.sim_best} /></span>}
           </div>
         </div>
         <button className="btn ghost icon" title={f.pinned ? "Lösen" : "Anheften (wichtig)"} onClick={() => update({ pinned: !f.pinned }, f.pinned ? "Gelöst" : "Angeheftet")}>
@@ -177,6 +178,7 @@ export default function FileDetail({ id, onClose, onChanged }: { id: number; onC
             <button className={tab === "inhalt" ? "on" : ""} onClick={() => setTab("inhalt")}>Inhalt</button>
             <button className={tab === "ocr" ? "on" : ""} onClick={() => setTab("ocr")}><ScanText size={13} style={{ verticalAlign: -2 }} /> OCR</button>
             <button className={tab === "duplikate" ? "on" : ""} onClick={() => setTab("duplikate")}>Duplikate ({f.duplicates.length})</button>
+            <button className={tab === "aehnlich" ? "on" : ""} onClick={() => setTab("aehnlich")} title="Ähnliche Fotos, Versionen und gleicher Inhalt in anderem Format">Ähnliche ({f.similar.length})</button>
           </div>
           <div style={{ paddingTop: 10 }}>
             {f.online_only ? (
@@ -220,6 +222,30 @@ export default function FileDetail({ id, onClose, onChanged }: { id: number; onC
                 ))}
               </div>
             ) : <div className="faint" style={{ fontSize: 12.5 }}>Keine identischen Kopien gefunden.</div>)}
+            {tab === "aehnlich" && (f.similar.length ? (
+              <div className="sim-list">
+                <div className="row" style={{ gap: 6, fontSize: 12.5 }}>
+                  <SimBadge kind={f.sim_kind} count={f.sim_count} best={f.sim_best} />
+                  <span className="faint">{SIM_TEXT[f.sim_kind ?? ""]?.hint}</span>
+                </div>
+                {f.sim_kind === "Versionen" && (
+                  <div className={`callout ${f.sim_best ? "ok" : "warn"}`} style={{ fontSize: 12.5 }}>
+                    {f.sim_best ? "Diese Datei ist die neueste Version ihrer Gruppe." : "Es gibt eine neuere Version dieser Datei (★). Beim Kopieren können ältere Versionen ausgelassen werden – gelöscht wird nichts."}
+                  </div>
+                )}
+                {f.similar.map((m) => (
+                  <div key={m.id} className="sim-row" onClick={() => onOpen?.(m.id)} title={m.path}>
+                    <FileThumbOrIcon id={m.id} thumbs={m.thumbs} type={m.file_type} ext={m.ext} />
+                    <div className="grow" style={{ minWidth: 0 }}>
+                      <div className="ellipsis" style={{ fontWeight: 600, fontSize: 12.5 }}>{m.sim_best === 1 ? "★ " : ""}{m.name}</div>
+                      <div className="faint ellipsis" style={{ fontSize: 11.5 }}>{m.pair_text} · {m.computer_name} · {m.volume_name}</div>
+                      <div className="faint" style={{ fontSize: 11.5 }}>{fmtDate(m.mtime)} · {fmtBytes(m.size)}{m.online_only ? " · ☁ nur online" : ""}</div>
+                    </div>
+                    {m.score != null && <span className="score" style={{ fontSize: 12.5 }} title="Ähnlichkeit">{Math.round(m.score * 100)} %</span>}
+                  </div>
+                ))}
+              </div>
+            ) : <div className="faint" style={{ fontSize: 12.5 }}>Keine ähnlichen Dateien gefunden (geprüft werden Fotos, Versionen im Dateinamen und der Textinhalt).</div>)}
           </div>
         </div>
 

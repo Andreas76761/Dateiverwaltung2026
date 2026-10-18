@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Check, ChevronDown, ChevronRight, Cloud, Folder, FolderInput, Pencil, RefreshCw, RotateCcw, ShieldCheck, X } from "lucide-react";
 import { get, post, qs } from "../api";
 import FileDetail from "../components/FileDetail";
-import { Empty, FileThumbOrIcon, GroupBadge, Importance, Labels, ReviewBadge, useAsync, useJobs, useToast } from "../components/ui";
+import { Empty, FileThumbOrIcon, GroupBadge, Importance, Labels, ReviewBadge, SimBadge, useAsync, useJobs, useToast } from "../components/ui";
 import type { TreeNode } from "../types";
 import { fmtBytes, fmtNum, shortPath } from "../util";
 
@@ -10,6 +10,7 @@ interface PFile {
   id: number; name: string; path: string; computer_name: string; volume_name: string; file_type: string; size: number; mtime: string;
   category: string; group_name: string; importance: number; confidence: number; target: string; review_status: string;
   dup_count: number; is_primary: number; summary: string; thumbs: number; labels: string[]; ext?: string; final_path: string | null;
+  sim_kind: string | null; sim_count: number; sim_best: number;
 }
 
 function Node({ n, depth, sel, onSel }: { n: TreeNode; depth: number; sel: string; onSel: (p: string) => void }) {
@@ -168,7 +169,7 @@ export default function Proposal() {
                       <FileThumbOrIcon id={f.id} thumbs={f.thumbs} type={f.file_type} ext={f.ext || ""} />
                       <div className="grow">
                         <div className="n ellipsis">{f.name}</div>
-                        <div className="row" style={{ gap: 5, marginTop: 2 }}><GroupBadge group={f.group_name} /><span className="faint ellipsis" style={{ fontSize: 11.5 }}>{f.category}</span>{f.dup_count > 1 && <span className="badge warn">{f.dup_count}×</span>}</div>
+                        <div className="row" style={{ gap: 5, marginTop: 2 }}><GroupBadge group={f.group_name} /><span className="faint ellipsis" style={{ fontSize: 11.5 }}>{f.category}</span>{f.dup_count > 1 && <span className="badge warn">{f.dup_count}×</span>}<SimBadge kind={f.sim_kind} count={f.sim_count} best={f.sim_best} small /></div>
                       </div>
                     </div>
                   </td>
@@ -195,7 +196,7 @@ export default function Proposal() {
           {root && <span><b>{fmtNum(root.approved)}</b> freigegeben · {fmtNum(root.rejected)} abgelehnt · {fmtNum(root.count - root.approved - root.rejected)} offen</span>}
         </div>
       </div>
-      {detail && <FileDetail id={detail} onClose={() => setDetail(null)} onChanged={() => setTick((t) => t + 1)} />}
+      {detail && <FileDetail id={detail} onClose={() => setDetail(null)} onChanged={() => setTick((t) => t + 1)} onOpen={setDetail} />}
     </div>
   );
 }

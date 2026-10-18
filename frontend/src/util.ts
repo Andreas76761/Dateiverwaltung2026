@@ -39,6 +39,7 @@ export const JOB_LABEL: Record<string, string> = {
   propose: "3 · Vorschlag",
   copy: "4 · Kopieren",
   inventory: "Inventar",
+  similar: "Ähnliche Dateien",
 };
 
 /** Langen Pfad auf die letzten Segmente kürzen: "…/Ordner/Unterordner/Datei.pdf" */

@@ -32,6 +32,10 @@ export interface FileItem {
   online_only: number;      // Cloud-Platzhalter: Inhalt liegt nur online
   web_url?: string | null;  // Cloud-Schnittstelle: Link zum Öffnen in OneDrive/Google Drive
   thumb_labels: string[]; // Video-Zeitpunkte bzw. "E-Mail · S. 1" / "Anhang: …"
+  sim_group: number | null; // Ähnlichkeitsgruppe (Fotos, Versionen, Formate, Inhalt)
+  sim_count: number;
+  sim_kind: SimKind | null;
+  sim_best: number;         // 1 = Empfehlung (neueste Version / bestes Foto), 2 = gleicher Inhalt in anderem Format
   computer_name: string;
   volume_name: string;
   volume_kind: string;
@@ -52,6 +56,46 @@ export interface FileDetail extends FileItem {
   duplicates: { id: number; path: string; computer_name: string; volume_name: string; mtime: string; is_primary: number }[];
   copies: CopyOp[];
   target_root: string;
+  similar: SimilarFile[];
+}
+
+export type SimKind = "Versionen" | "Formate" | "Inhalt" | "Fotos";
+
+export interface SimilarFile {
+  id: number;
+  name: string;
+  path: string;
+  ext: string;
+  file_type: string;
+  size: number;
+  mtime: string;
+  computer_id: string;
+  computer_name: string;
+  volume_name: string;
+  category: string | null;
+  group_name: Group | null;
+  importance: number;
+  sim_group: number;
+  sim_kind: SimKind;
+  sim_best: number;
+  online_only: number;
+  review_status: string;
+  thumbs: number;
+  pair_kind?: string | null;
+  pair_text?: string;
+  score?: number | null;
+}
+
+export interface SimGroup {
+  id: number;
+  kind: SimKind;
+  n: number;
+  bytes: number;
+  other_bytes: number;
+  importance: number;
+  score_min: number | null;
+  score_max: number | null;
+  members: SimilarFile[];
 }
 
 export interface FileList {
@@ -64,7 +108,7 @@ export interface FileList {
 
 export interface Job {
   id: number;
-  kind: "scan" | "analyze" | "propose" | "copy" | "inventory";
+  kind: "scan" | "analyze" | "propose" | "copy" | "inventory" | "similar";
   status: "wartend" | "läuft" | "fertig" | "fehler" | "abgebrochen";
   progress: number;
   total: number;

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Cloud, Copy, Folder, FolderOpen, GalleryHorizontal, HardDrive, Images, LayoutGrid, Laptop, List, PanelLeftClose, PanelLeftOpen, Pin, Search, Usb, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Cloud, Copy, Folder, FolderOpen, GalleryHorizontal, HardDrive, Images, Layers, LayoutGrid, Laptop, List, PanelLeftClose, PanelLeftOpen, Pin, Search, Usb, X } from "lucide-react";
 import { get, post, qs, thumbUrl } from "../api";
 import FileDetail from "../components/FileDetail";
-import { FileIcon, FileThumbOrIcon, GroupBadge, Importance, Labels, OnlineBadge, PageViewer, ReviewBadge, useAsync, useJobs } from "../components/ui";
+import { FileIcon, FileThumbOrIcon, GroupBadge, Importance, Labels, OnlineBadge, PageViewer, ReviewBadge, SimBadge, useAsync, useJobs } from "../components/ui";
 import type { Computer, FileItem, FileList } from "../types";
 
 // Dateitypen mit Seitenvorschau (Office über LibreOffice → PDF → alle Seiten)
@@ -54,6 +54,7 @@ function PageStrip({ f, selected, onOpen, onPage, onChanged }: { f: FileItem; se
         <GroupBadge group={f.group_name} />
         {f.category && <span className="badge outline">{f.category}</span>}
         {f.dup_count > 1 && <span className={`badge ${f.is_primary ? "warn" : "bad"}`}>{f.dup_count}×</span>}
+        <SimBadge kind={f.sim_kind} count={f.sim_count} best={f.sim_best} />
         <div style={{ width: 110 }}><Importance value={f.importance} /></div>
       </div>
       {f.thumbs > 0 ? (
@@ -158,6 +159,7 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
   });
   const [previewOnly, setPreviewOnly] = useState(false);
   const [online, setOnline] = useState(params.get("online") || "");
+  const [similar, setSimilar] = useState(params.get("similar") || "");
   const [showTree, setShowTree] = useState<boolean>(() => {
     try { return localStorage.getItem("fdv-tree") !== "0"; } catch { return true; }
   });
@@ -186,8 +188,9 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
     status: group === "(nicht analysiert)" ? "eingelesen" : undefined,
     ext: previewOnly ? PREVIEW_EXTS : undefined,
     online,
+    similar,
     limit,
-  }), [qDebounced, sel, group, category, fileType, label, dup, review, dateFrom, dateTo, sort, order, limit, previewOnly, view, online]);
+  }), [qDebounced, sel, group, category, fileType, label, dup, review, dateFrom, dateTo, sort, order, limit, previewOnly, view, online, similar]);
   const list = useAsync<FileList>(() => get(`/api/files${query}`), [query, version, tick]);
 
   const setSortCol = (c: string) => {
@@ -199,8 +202,8 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
       <span className="row" style={{ gap: 3 }}>{children}{sort === c && (order === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}</span>
     </th>
   );
-  const anyFilter = online || previewOnly || group || category || fileType || label || dup || review || dateFrom || dateTo || qDebounced;
-  const reset = () => { setGroup(""); setCategory(""); setFileType(""); setLabel(""); setDup(""); setReview(""); setDateFrom(""); setDateTo(""); setQ(""); setPreviewOnly(false); setOnline(""); };
+  const anyFilter = similar || online || previewOnly || group || category || fileType || label || dup || review || dateFrom || dateTo || qDebounced;
+  const reset = () => { setGroup(""); setCategory(""); setFileType(""); setLabel(""); setDup(""); setReview(""); setDateFrom(""); setDateTo(""); setQ(""); setPreviewOnly(false); setOnline(""); setSimilar(""); };
   const items = list.data?.items ?? [];
   const compact = detail !== null;
   const selName = (() => {
@@ -242,6 +245,9 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
         ))}
         <div className={`tree-item ${dup === "ja" ? "on" : ""}`} onClick={() => setDup(dup === "ja" ? "" : "ja")}>
           <span className="chev" /><Copy size={14} /> Duplikate
+        </div>
+        <div className={`tree-item ${similar === "ja" ? "on" : ""}`} onClick={() => setSimilar(similar === "ja" ? "" : "ja")} title="Ähnliche Fotos, Versionen, gleicher Inhalt als PDF/DOCX">
+          <span className="chev" /><Layers size={14} /> Ähnliche Dateien
         </div>
       </div>}
 
@@ -297,6 +303,15 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
             <option value="nur_kopien">nur überzählige Kopien</option>
             <option value="nein">ohne Duplikate</option>
           </select>
+          <select className="input" style={{ padding: "3px 8px", fontSize: 12 }} value={similar} onChange={(e) => setSimilar(e.target.value)} title="Ähnliche (nicht identische) Dateien">
+            <option value="">Ähnliche: alle</option>
+            <option value="ja">≈ alle ähnlichen</option>
+            <option value="Versionen">≈ Versionen</option>
+            <option value="ältere">≈ nur ältere Versionen</option>
+            <option value="Formate">≈ gleicher Inhalt, anderes Format</option>
+            <option value="Fotos">≈ ähnliche Fotos</option>
+            <option value="Inhalt">≈ ähnlicher Inhalt</option>
+          </select>
           <select className="input" style={{ padding: "3px 8px", fontSize: 12 }} value={online} onChange={(e) => setOnline(e.target.value)} title="Cloud-Dateien, die nur online liegen, werden nie gelesen">
             <option value="">Speicherort: alle</option>
             <option value="nein">lokal verfügbar</option>
@@ -347,6 +362,7 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
                             {f.pinned ? <Pin size={12} color="var(--accent)" /> : null}
                             <span className="ellipsis">{f.name}</span>
                             {f.dup_count > 1 && <span className={`badge ${f.is_primary ? "warn" : "bad"}`} style={{ fontSize: 10, padding: "0 6px" }}>{f.dup_count}×</span>}
+                            <SimBadge kind={f.sim_kind} count={f.sim_count} best={f.sim_best} small />
                             {f.online_only ? <OnlineBadge small /> : null}
                           </div>
                           <div className="p ellipsis">{f.file_type}{f.page_count ? ` · ${f.page_count} S.` : ""} · {f.rel_path}</div>
@@ -375,7 +391,7 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
                   </div>
                   <div className="tile-body">
                     <div className="n ellipsis" title={f.name}>{f.name}</div>
-                    <div className="row" style={{ gap: 5 }}><GroupBadge group={f.group_name} />{f.dup_count > 1 && <span className="badge warn">{f.dup_count}×</span>}{f.online_only ? <OnlineBadge small /> : <ReviewBadge status={f.review_status} />}</div>
+                    <div className="row" style={{ gap: 5 }}><GroupBadge group={f.group_name} />{f.dup_count > 1 && <span className="badge warn">{f.dup_count}×</span>}<SimBadge kind={f.sim_kind} count={f.sim_count} best={f.sim_best} small />{f.online_only ? <OnlineBadge small /> : <ReviewBadge status={f.review_status} />}</div>
                     <div className="faint ellipsis" style={{ fontSize: 11 }}>{f.category} · {fmtDate(f.mtime)}</div>
                   </div>
                 </div>
@@ -395,7 +411,7 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
       </div>
 
       {viewer && <PageViewer fileId={viewer.id} name={viewer.name} pages={viewer.pages} start={viewer.page} onClose={() => setViewer(null)} labels={viewer.labels} video={viewer.video} />}
-      {detail && <FileDetail id={detail} onClose={() => setDetail(null)} onChanged={() => setTick((t) => t + 1)} />}
+      {detail && <FileDetail id={detail} onClose={() => setDetail(null)} onChanged={() => setTick((t) => t + 1)} onOpen={setDetail} />}
     </div>
   );
 }

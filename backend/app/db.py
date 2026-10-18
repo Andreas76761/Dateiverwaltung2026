@@ -273,6 +273,17 @@ MIGRATIONS = [
     "CREATE INDEX IF NOT EXISTS ix_files_quick ON files(quick_hash)",
     "CREATE INDEX IF NOT EXISTS ix_files_review ON files(review_status)",
     "CREATE INDEX IF NOT EXISTS ix_thumbs_file ON thumbnails(file_id)",
+    # Ähnliche Dateien (Fotos, Versionen, gleicher Inhalt in anderem Format) – siehe skills/similarity.py
+    "ALTER TABLE files ADD COLUMN phash TEXT",
+    "ALTER TABLE files ADD COLUMN minhash BLOB",
+    "ALTER TABLE files ADD COLUMN sim_sig_at TEXT",
+    "ALTER TABLE files ADD COLUMN sim_group INTEGER",
+    "ALTER TABLE files ADD COLUMN sim_count INTEGER DEFAULT 1",
+    "ALTER TABLE files ADD COLUMN sim_kind TEXT",         # Versionen | Formate | Inhalt | Fotos
+    "ALTER TABLE files ADD COLUMN sim_best INTEGER DEFAULT 0",
+    "CREATE INDEX IF NOT EXISTS ix_files_sim ON files(sim_group)",
+    "CREATE TABLE IF NOT EXISTS similar_pairs (a INTEGER NOT NULL, b INTEGER NOT NULL, kind TEXT, score REAL, PRIMARY KEY (a, b))",
+    "CREATE INDEX IF NOT EXISTS ix_simpairs_b ON similar_pairs(b)",
     # Volltextsuche über Name, Pfad, Zusammenfassung, Inhalt, OCR und Labels (rowid = files.id)
     "CREATE VIRTUAL TABLE IF NOT EXISTS files_fts USING fts5(name, path, body, tokenize='unicode61 remove_diacritics 2')",
 ]

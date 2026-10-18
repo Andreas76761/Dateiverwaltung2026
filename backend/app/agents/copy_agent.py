@@ -54,10 +54,15 @@ def run(job: Job, params: dict) -> dict:
         where += f" AND id IN ({','.join('?' * len(ids))})"
     else:
         ids = []
+    older = 0
+    if params.get("skip_older_versions"):  # erkannte ältere Versionen auslassen (bleiben im Original erhalten)
+        older = db.one(f"SELECT COUNT(*) n FROM files WHERE {where} AND sim_kind='Versionen' AND sim_best=0", ids)["n"]
+        where += " AND NOT (COALESCE(sim_kind,'')='Versionen' AND sim_best=0)"
     files = db.query(f"SELECT *, COALESCE(final_path, suggested_path) target FROM files WHERE {where}", ids)
     dry = bool(params.get("dry_run"))
     allow_online = bool(params.get("download_online_only", s.cloud.get("download_online_only")))
     stats = {"geplant": len(files), "kopiert": 0, "übersprungen": 0, "fehler": 0, "an_agent_übergeben": 0, "nur_online": 0,
+             "ältere_versionen_ausgelassen": older,
              "bytes": 0, "trockenlauf": dry, "ziel": s.target_root}
     stats["cloud_serverseitig"] = 0
     folder_cache: dict = {}

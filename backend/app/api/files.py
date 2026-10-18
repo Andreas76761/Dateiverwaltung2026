@@ -24,7 +24,7 @@ SORTS = {
 
 
 def _filters(q, computer, volume, group, category, label, file_type, ext, review, dup, date_from, date_to,
-             folder, status, min_importance, include_missing, online=None):
+             folder, status, min_importance, include_missing, online=None, similar=None):
     where, args = ["1=1"], []
     if not include_missing:
         where.append("f.missing=0")
@@ -62,6 +62,13 @@ def _filters(q, computer, volume, group, category, label, file_type, ext, review
         where.append("f.online_only=1")
     elif online == "nein":
         where.append("f.online_only=0")
+    if similar == "ja":
+        where.append("f.sim_group IS NOT NULL")
+    elif similar == "ältere":
+        where.append("f.sim_kind='Versionen' AND f.sim_best=0")
+    elif similar in ("Versionen", "Formate", "Inhalt", "Fotos"):
+        where.append("f.sim_kind=?")
+        args.append(similar)
     if min_importance:
         where.append("f.importance>=?")
         args.append(min_importance)
@@ -71,6 +78,7 @@ def _filters(q, computer, volume, group, category, label, file_type, ext, review
 LIST_COLS = """f.id, f.computer_id, f.volume_id, f.path, f.rel_path, f.name, f.ext, f.file_type, f.size, f.mtime, f.ctime,
   f.page_count, f.summary, f.category, f.group_name, f.confidence, f.importance, f.suggested_path, f.final_path,
   f.review_status, f.dup_count, f.is_primary, f.status, f.pinned, f.missing, f.online_only, f.thumbs_complete, f.web_url,
+  f.sim_group, f.sim_count, f.sim_kind, f.sim_best,
   (SELECT group_concat(label, '|') FROM labels l WHERE l.file_id=f.id) labels,
   (SELECT COUNT(*) FROM thumbnails t WHERE t.file_id=f.id) thumbs,
   (SELECT group_concat(COALESCE(t.label, ''), '|') FROM thumbnails t WHERE t.file_id=f.id AND f.file_type IN ('Video', 'E-Mail')) thumb_labels,
@@ -89,11 +97,12 @@ def list_files(
     category: Optional[str] = None, label: Optional[str] = None, file_type: Optional[str] = None, ext: Optional[str] = None,
     review: Optional[str] = None, dup: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None,
     folder: Optional[str] = None, status: Optional[str] = None, min_importance: Optional[int] = None,
-    include_missing: bool = False, online: Optional[str] = None, sort: str = "importance", order: str = "desc",
+    include_missing: bool = False, online: Optional[str] = None, similar: Optional[str] = None,
+    sort: str = "importance", order: str = "desc",
     page: int = Query(1, ge=1), limit: int = Query(100, ge=1, le=1000),
 ):
     where, args = _filters(q, computer, volume, group, category, label, file_type, ext, review, dup, date_from, date_to,
-                           folder, status, min_importance, include_missing, online)
+                           folder, status, min_importance, include_missing, online, similar)
     sort_sql = SORTS.get(sort, "f.importance")
     order_sql = "ASC" if order == "asc" else "DESC"
     base = "FROM files f JOIN computers c ON c.id=f.computer_id JOIN volumes v ON v.id=f.volume_id"
@@ -159,9 +168,67 @@ def file_detail(file_id: int):
         """SELECT f.id, f.path, f.computer_id, c.name computer_name, v.name volume_name, f.mtime, f.is_primary
            FROM files f JOIN computers c ON c.id=f.computer_id JOIN volumes v ON v.id=f.volume_id
            WHERE f.sha256=? AND f.id!=? AND f.missing=0""", (f["sha256"], file_id)) if f.get("sha256") else []
+    f["similar"] = similar_of(file_id, f.get("sim_group"))
     f["copies"] = db.query("SELECT * FROM copy_ops WHERE file_id=? ORDER BY id DESC", (file_id,))
     f["target_root"] = get_settings().target_root
     return f
+
+
+SIM_COLS = """f.id, f.name, f.path, f.ext, f.file_type, f.size, f.mtime, f.computer_id, c.name computer_name, v.name volume_name,
+  f.category, f.group_name, f.importance, f.sim_group, f.sim_kind, f.sim_best, f.online_only, f.review_status,
+  (SELECT COUNT(*) FROM thumbnails t WHERE t.file_id=f.id) thumbs"""
+SIM_KIND_TEXT = {"version": "Version", "format": "Gleicher Inhalt, anderes Format", "inhalt": "Ähnlicher Inhalt", "foto": "Ähnliches Foto"}
+
+
+def similar_of(file_id: int, group: Optional[int]) -> list[dict]:
+    """Andere Mitglieder der Ähnlichkeitsgruppe – mit direkter Ähnlichkeit zu dieser Datei, falls bekannt."""
+    if not group:
+        return []
+    rows = db.query(f"""SELECT {SIM_COLS}, p.kind pair_kind, p.score FROM files f
+                        JOIN computers c ON c.id=f.computer_id JOIN volumes v ON v.id=f.volume_id
+                        LEFT JOIN similar_pairs p ON (p.a=? AND p.b=f.id) OR (p.b=? AND p.a=f.id)
+                        WHERE f.sim_group=? AND f.id!=? AND f.missing=0
+                        ORDER BY f.sim_best=1 DESC, f.sim_best DESC, p.score DESC, f.mtime DESC""", (file_id, file_id, group, file_id))
+    for r in rows:
+        r["pair_text"] = SIM_KIND_TEXT.get(r["pair_kind"] or "", "Über andere Datei der Gruppe verbunden")
+    return rows
+
+
+@router.get("/similar")
+def similar_groups(kind: Optional[str] = None, q: Optional[str] = None, page: int = Query(1, ge=1),
+                   limit: int = Query(30, ge=1, le=200)):
+    """Ähnlichkeitsgruppen (Fotos, Versionen, Formate, Inhalt) – größte Einsparung zuerst."""
+    where, args = ["f.missing=0", "f.sim_group IS NOT NULL"], []
+    if kind:
+        where.append("f.sim_kind=?")
+        args.append(kind)
+    if q and db.fts_query(q):
+        where.append("f.sim_group IN (SELECT sim_group FROM files WHERE id IN (SELECT rowid FROM files_fts WHERE files_fts MATCH ?))")
+        args.append(db.fts_query(q))
+    w = " AND ".join(where)
+    total = db.one(f"SELECT COUNT(DISTINCT f.sim_group) n FROM files f WHERE {w}", args)["n"]
+    groups = db.query(f"""SELECT f.sim_group id, f.sim_kind kind, COUNT(*) n, COALESCE(SUM(f.size),0) bytes,
+                          COALESCE(SUM(CASE WHEN f.sim_best=0 THEN f.size END),0) other_bytes, MAX(f.importance) importance
+                          FROM files f WHERE {w} GROUP BY f.sim_group, f.sim_kind
+                          ORDER BY MAX(f.importance) DESC, n DESC, f.sim_group LIMIT ? OFFSET ?""", [*args, limit, (page - 1) * limit])
+    if groups:
+        ids = [g["id"] for g in groups]
+        members = db.query(f"""SELECT {SIM_COLS} FROM files f JOIN computers c ON c.id=f.computer_id JOIN volumes v ON v.id=f.volume_id
+                               WHERE f.missing=0 AND f.sim_group IN ({','.join('?' * len(ids))})
+                               ORDER BY f.sim_best=1 DESC, f.sim_best DESC, f.mtime DESC""", ids)
+        by_group: dict = {}
+        for m in members:
+            by_group.setdefault(m["sim_group"], []).append(m)
+        scores = {r["g"]: r for r in db.query(
+            f"""SELECT f.sim_group g, MIN(p.score) lo, MAX(p.score) hi FROM similar_pairs p JOIN files f ON f.id=p.a
+                WHERE f.sim_group IN ({','.join('?' * len(ids))}) GROUP BY 1""", ids)}
+        for g in groups:
+            g["members"] = by_group.get(g["id"], [])
+            g["score_min"], g["score_max"] = (scores[g["id"]]["lo"], scores[g["id"]]["hi"]) if g["id"] in scores else (None, None)
+    summary = db.query("""SELECT sim_kind k, COUNT(DISTINCT sim_group) groups, COUNT(*) n,
+                          COALESCE(SUM(CASE WHEN sim_best=0 THEN size END),0) other_bytes
+                          FROM files WHERE missing=0 AND sim_group IS NOT NULL GROUP BY 1""")
+    return {"total": total, "page": page, "limit": limit, "groups": groups, "summary": summary}
 
 
 @router.get("/files/{file_id}/thumb/{page}")
