@@ -1,22 +1,42 @@
 """Skill: OCR (Tesseract) für Bilder und gescannte PDFs – wie die OCR-Funktion von Screenarchiv/oneSCM."""
 from __future__ import annotations
 
-import shutil
+from functools import lru_cache
 
+from .. import platform_tools
 from ..config import get_settings
 
 
 def available() -> bool:
-    return shutil.which("tesseract") is not None
+    return platform_tools.tesseract() is not None
+
+
+def _pytesseract():
+    import pytesseract
+
+    pytesseract.pytesseract.tesseract_cmd = platform_tools.tesseract() or "tesseract"
+    return pytesseract
+
+
+@lru_cache
+def languages() -> str:
+    """Konfigurierte OCR-Sprachen, beschränkt auf tatsächlich installierte (Windows-Installer bringt oft nur 'eng' mit)."""
+    wanted = get_settings().analysis.get("ocr_languages", "deu+eng").split("+")
+    try:
+        have = set(_pytesseract().get_languages(config=""))
+    except Exception:
+        return "+".join(wanted)
+    use = [l for l in wanted if l in have] or (["eng"] if "eng" in have else wanted)
+    return "+".join(use)
 
 
 def ocr_image(path: str) -> str:
-    import pytesseract
+    pytesseract = _pytesseract()
     from PIL import Image
 
     with Image.open(path) as im:
         im.thumbnail((3000, 3000))
-        return pytesseract.image_to_string(im.convert("RGB"), lang=get_settings().analysis["ocr_languages"])
+        return pytesseract.image_to_string(im.convert("RGB"), lang=languages())
 
 
 def ocr_pdf(path: str, max_pages: int = 5) -> str:
@@ -24,8 +44,9 @@ def ocr_pdf(path: str, max_pages: int = 5) -> str:
     import io
 
     import pymupdf
-    import pytesseract
     from PIL import Image
+
+    pytesseract = _pytesseract()
 
     out = []
     with pymupdf.open(path) as doc:
@@ -34,7 +55,7 @@ def ocr_pdf(path: str, max_pages: int = 5) -> str:
                 break
             pix = page.get_pixmap(dpi=200)
             im = Image.open(io.BytesIO(pix.tobytes("png")))
-            out.append(pytesseract.image_to_string(im, lang=get_settings().analysis["ocr_languages"]))
+            out.append(pytesseract.image_to_string(im, lang=languages()))
     return "\n".join(out)
 
 

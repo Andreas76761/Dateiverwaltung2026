@@ -104,3 +104,21 @@ def test_safe_copy_never_overwrites_and_blocks_traversal(env, tmp_path):
     assert Path(r3["dst"]).resolve().is_relative_to(target.resolve()) or r3["status"] == "übersprungen"
     with pytest.raises(SafetyError):
         safe_copy(str(target / "a" / "prompt.md"), "b/x.md")  # Quelle im Ziel
+
+
+def test_windows_safe_target_paths():
+    from app.safety import sanitize_rel
+    assert sanitize_rel("02_Beruf/CON/aux.txt") == "02_Beruf/_CON/_aux.txt"       # reservierte Windows-Namen
+    assert sanitize_rel("a/ende. /datei.pdf ") == "a/ende/datei.pdf"            # Punkt/Leerzeichen am Ende
+    assert sanitize_rel("Kunde: Müller?/R*.pdf") == "Kunde_ Müller_/R_.pdf"     # verbotene Zeichen
+    assert sanitize_rel("../../etc/passwd") == "etc/passwd"                      # kein Ausbruch aus dem Ziel
+
+
+def test_file_limit_does_not_mark_missing(env, monkeypatch):
+    client, src, _ = env
+    wait(client, client.post("/api/pipeline/scan", json={}).json()["job_id"])
+    from app.config import get_settings
+    get_settings().max_files = 1                     # Probelauf-Limit: nur 1 Datei lesen
+    j = wait(client, client.post("/api/pipeline/scan", json={}).json()["job_id"])
+    assert j["stats"]["limit_erreicht"] and j["stats"]["nicht_mehr_gefunden"] == 0
+    assert client.get("/api/files").json()["total"] == 3     # nichts fälschlich als "fehlend" markiert

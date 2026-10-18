@@ -13,6 +13,7 @@ import shutil
 from pathlib import Path
 
 from .config import get_settings
+from .platform_tools import long_path
 
 
 class SafetyError(Exception):
@@ -38,21 +39,28 @@ def assert_in_target(p: Path, root: Path | None = None) -> Path:
     return p
 
 
+# Unter Windows verbotene Namen (auch mit Endung, z. B. "CON.txt")
+WIN_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+
+
 def sanitize_rel(rel: str) -> str:
-    """Zielpfad bereinigen: keine absoluten Pfade, kein '..', keine verbotenen Zeichen."""
+    """Zielpfad bereinigen – gültig unter Windows, macOS und Linux:
+    keine absoluten Pfade, kein '..', keine verbotenen Zeichen/Namen, keine Punkte/Leerzeichen am Ende."""
     bad = '<>:"|?*'
     parts = []
     for part in rel.replace("\\", "/").split("/"):
-        part = "".join("_" if ch in bad or ord(ch) < 32 else ch for ch in part).strip().rstrip(".")
+        part = "".join("_" if ch in bad or ord(ch) < 32 else ch for ch in part).strip().rstrip(". ")
         if part in ("", ".", ".."):
             continue
+        if part.split(".")[0].upper() in WIN_RESERVED:
+            part = "_" + part
         parts.append(part[:120])
     return "/".join(parts)
 
 
 def sha256_file(path: str | Path, chunk: int = 1024 * 1024) -> str:
     h = hashlib.sha256()
-    with open(path, "rb") as fh:
+    with open(long_path(path), "rb") as fh:
         while b := fh.read(chunk):
             h.update(b)
     return h.hexdigest()
@@ -84,14 +92,14 @@ def safe_copy(src: str, rel_dst: str, expected_hash: str | None = None, root: Pa
             i += 1
         dst = cand
 
-    dst.parent.mkdir(parents=True, exist_ok=True)
+    os.makedirs(long_path(dst.parent), exist_ok=True)
     tmp = dst.with_name(dst.name + ".fdv-partial")
-    shutil.copy2(src_p, tmp)          # Inhalt + Zeitstempel übernehmen
+    shutil.copy2(long_path(src_p), long_path(tmp))  # Inhalt + Zeitstempel übernehmen (Windows: auch > 260 Zeichen)
     ok = sha256_file(tmp) == src_hash
     if not ok:
         # nur unsere eigene, unvollständige Temp-Datei im Zielordner wird entfernt
         assert_in_target(tmp, root)
         tmp.unlink(missing_ok=True)
         raise SafetyError("Prüfsumme nach Kopie stimmt nicht überein")
-    os.replace(tmp, dst)
+    os.replace(long_path(tmp), long_path(dst))
     return {"status": "kopiert", "dst": str(dst), "bytes": src_p.stat().st_size, "verified": True, "message": ""}

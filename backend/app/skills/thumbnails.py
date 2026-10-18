@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from .. import platform_tools
 from ..config import get_settings
 from . import mail, video
 from .filetype import IMAGE_EXTS, OFFICE_PAGED
@@ -21,7 +22,7 @@ CALC_SINGLE_PAGE = 'pdf:calc_pdf_Export:{"SinglePageSheets":{"type":"boolean","v
 
 def _office_to_pdf(path: str) -> Path | None:
     """Konvertiert eine Office-Datei in eine PDF im Cache (Quelle bleibt unverändert)."""
-    soffice = shutil.which("soffice") or shutil.which("libreoffice")
+    soffice = platform_tools.soffice()
     if not soffice:
         return None
     cache = get_settings().data_dir / "pdf-cache"
@@ -36,7 +37,7 @@ def _office_to_pdf(path: str) -> Path | None:
     for target in ([CALC_SINGLE_PAGE, "pdf"] if sheet else ["pdf"]):
         with tempfile.TemporaryDirectory() as tmp:
             profile = Path(tmp) / "lo-profile"
-            cmd = [soffice, f"-env:UserInstallation=file://{profile}", "--headless", "--norestore",
+            cmd = [soffice, f"-env:UserInstallation={profile.as_uri()}", "--headless", "--norestore",
                    "--convert-to", target, "--outdir", tmp, path]
             subprocess.run(cmd, capture_output=True, timeout=180, check=False)
             produced = list(Path(tmp).glob("*.pdf"))

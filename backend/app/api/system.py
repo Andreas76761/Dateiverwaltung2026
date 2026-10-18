@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from .. import db
 from ..categories import as_dicts
+from .. import platform_tools
 from ..config import get_settings
 from ..connectors import cloud
 from ..llm import costs
@@ -94,7 +95,7 @@ def settings():
         "target_root": s.target_root,
         "target_structure": s.target_structure,
         "ocr_available": ocr.available(),
-        "libreoffice_available": bool(shutil.which("soffice")),
+        "libreoffice_available": bool(platform_tools.soffice()),
         "api_key_enabled": bool(s.api_key),
         "config_file": str(s.source),
     }

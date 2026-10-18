@@ -26,9 +26,9 @@ def list_skills() -> list[dict]:
         if s["id"] == "ocr":
             s["verfügbar"] = ocr.available()
         elif s["id"] == "thumbnails":
-            import shutil
             s["verfügbar"] = True
-            s["office"] = bool(shutil.which("soffice"))
+            from .. import platform_tools
+            s["office"] = bool(platform_tools.soffice())
         else:
             s["verfügbar"] = True
         out.append(s)

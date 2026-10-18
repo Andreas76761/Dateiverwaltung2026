@@ -85,6 +85,7 @@ class Settings:
         self.exclude_dirs = set(scan.get("exclude_dirs", []))
         self.exclude_ext = {e.lower() for e in scan.get("exclude_ext", [])}
         self.follow_symlinks = bool(scan.get("follow_symlinks", False))
+        self.max_files = int(scan.get("max_files", 0) or 0)  # je Festplatte (0 = unbegrenzt) – z. B. für Probeläufe
 
         self.computers = []
         for c in raw.get("computers", []):

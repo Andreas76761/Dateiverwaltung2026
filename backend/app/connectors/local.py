@@ -16,6 +16,7 @@ def _iso(ts: float) -> str:
 
 
 def _under(path: str, parent: str) -> bool:
+    path, parent = os.path.normcase(path), os.path.normcase(parent)  # Windows: C:\Users == c:\users
     return path == parent or path.startswith(parent.rstrip(os.sep) + os.sep)
 
 

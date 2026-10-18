@@ -73,8 +73,15 @@ def scan_volume(job: Job, vol: dict, counters: dict) -> None:
             upsert_entries(c, vol["computer_id"], vol["id"], batch)
         batch.clear()
 
+    max_files = get_settings().max_files
+    seen, truncated = 0, False
     for entry in local.iter_files(vol["path"], errors):
         if job.cancelled:
+            break
+        seen += 1
+        if max_files and seen > max_files:
+            counters["limit_erreicht"] = True
+            truncated = True
             break
         batch.append(entry.__dict__)
         counters["dateien"] += 1
@@ -87,7 +94,7 @@ def scan_volume(job: Job, vol: dict, counters: dict) -> None:
         flush()
 
     with db.tx() as c:
-        if not job.cancelled:
+        if not job.cancelled and not truncated:  # bei Dateilimit nicht vollständig gelesen → nichts als fehlend markieren
             # Nicht mehr gefundene Dateien nur markieren – niemals aus der DB oder dem Datenträger löschen
             cur = c.execute("UPDATE files SET missing=1 WHERE volume_id=? AND scanned_at < ?", (vol["id"], started))
             counters["nicht_mehr_gefunden"] += cur.rowcount

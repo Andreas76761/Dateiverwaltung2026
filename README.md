@@ -26,6 +26,15 @@ Erweiterung: `inventory_agent` – installierte Programme, LLM-Lösungen (Ollama
 
 Optionale Systemprogramme: **Tesseract** (OCR, Sprachpaket `deu`) und **LibreOffice** (Miniaturen für PPTX/DOCX/XLSX). Für Videos wird ffmpeg genutzt – aus dem PATH oder automatisch über das Python-Paket `imageio-ffmpeg`. Ohne sie läuft alles weiter, nur ohne OCR bzw. ohne Office-Miniaturen.
 
+## Probelauf auf einem echten Computer
+
+Vor dem echten Einsatz: **[docs/PROBELAUF.md](docs/PROBELAUF.md)** – ein Ordner, Dateilimit, Trockenlauf, Vorher/Nachher-Nachweis, dass nichts verändert wurde, und ein Bericht zum Zurückmelden:
+
+```powershell
+.\probelauf.ps1 --ordner "$HOME\Documents" --max-dateien 2000      # Windows
+./probelauf.sh --ordner ~/Documents --max-dateien 2000              # macOS
+```
+
 ## Eigene Computer & Festplatten
 
 `config/fdv.example.yaml` nach `config/fdv.yaml` kopieren und anpassen:
