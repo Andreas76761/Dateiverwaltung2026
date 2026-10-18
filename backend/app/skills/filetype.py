@@ -5,11 +5,11 @@ import mimetypes
 
 TYPES = {
     "PDF": [".pdf"],
-    "Präsentation": [".pptx", ".ppt", ".odp", ".key", ".pps", ".ppsx"],
-    "Textdokument": [".docx", ".doc", ".odt", ".rtf", ".pages"],
-    "Tabelle": [".xlsx", ".xls", ".xlsm", ".ods", ".csv", ".numbers"],
+    "Präsentation": [".pptx", ".ppt", ".odp", ".key", ".pps", ".ppsx", ".gslides"],
+    "Textdokument": [".docx", ".doc", ".odt", ".rtf", ".pages", ".gdoc"],
+    "Tabelle": [".xlsx", ".xls", ".xlsm", ".ods", ".csv", ".numbers", ".gsheet"],
     "Text & Notizen": [".txt", ".md", ".markdown", ".rst", ".log", ".org"],
-    "Bild": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".heic", ".svg", ".raw", ".cr2", ".nef", ".arw", ".dng"],
+    "Bild": [".gdraw", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".heic", ".svg", ".raw", ".cr2", ".nef", ".arw", ".dng"],
     "Video": [".mp4", ".mov", ".avi", ".mkv", ".m4v", ".wmv", ".webm", ".mpg", ".mpeg", ".3gp", ".mts"],
     "Audio": [".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg"],
     "E-Mail": [".eml", ".msg"],

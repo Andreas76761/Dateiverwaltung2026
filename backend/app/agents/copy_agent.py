@@ -15,6 +15,34 @@ from ..jobs import Job
 from ..safety import SafetyError, safe_copy
 
 
+def _cloud_copy(f: dict, folder_cache: dict) -> tuple[str, str, str]:
+    """-> (status, Meldung, Ziel)"""
+    from ..connectors import cloud_api
+
+    p = cloud_api.provider_for_volume(f["volume_id"])
+    if not p:
+        return "fehler", "Cloud-Konto nicht mehr konfiguriert", f["target"]
+    acc = p.acc
+    folder_rel, _, name = f"{acc.target_folder.strip('/')}/{f['target']}".rpartition("/")
+    shown = name
+    for virt, _ in cloud_api.GOOGLE_NATIVE.values():  # interne Endung für Google-Dokumente nicht anzeigen
+        shown = shown[: -len(virt)] if shown.endswith(virt) else shown
+    dst = f"{acc.provider}://{acc.id}/{folder_rel}/{shown}"
+    # Schon einmal erfolgreich hierhin kopiert? (wichtig für Google-Dokumente/OneDrive Business ohne vergleichbare Prüfsumme)
+    if db.one("SELECT 1 FROM copy_ops WHERE file_id=? AND dst=? AND status='kopiert'", (f["id"], dst)):
+        return "übersprungen", "Bereits kopiert (laut Kopierprotokoll)", dst
+    if not cloud_api.status(acc)["write"]:
+        return "fehler", f"{acc.name}: Schreibzugriff für Kopien fehlt – unter „Quellen“ mit „Kopieren erlauben“ verbinden", dst
+    try:
+        key = (acc.id, folder_rel)
+        if key not in folder_cache:
+            folder_cache[key] = p.ensure_folder(folder_rel)
+        r = p.copy_into(f["remote_id"], folder_cache[key], name, f.get("sha256"), f.get("remote_hash"))
+        return r["status"], r["message"], dst
+    except cloud_api.CloudError as exc:
+        return "fehler", str(exc), dst
+
+
 def run(job: Job, params: dict) -> dict:
     s = get_settings()
     local = {c["id"] for c in s.computers if c["mode"] == "local"}
@@ -31,6 +59,8 @@ def run(job: Job, params: dict) -> dict:
     allow_online = bool(params.get("download_online_only", s.cloud.get("download_online_only")))
     stats = {"geplant": len(files), "kopiert": 0, "übersprungen": 0, "fehler": 0, "an_agent_übergeben": 0, "nur_online": 0,
              "bytes": 0, "trockenlauf": dry, "ziel": s.target_root}
+    stats["cloud_serverseitig"] = 0
+    folder_cache: dict = {}
     per_group: Counter = Counter()
     per_group_bytes: Counter = Counter()
     job.update(progress=0, total=len(files), message="Kopien werden erstellt …" if not dry else "Trockenlauf …", **stats)
@@ -46,6 +76,12 @@ def run(job: Job, params: dict) -> dict:
         elif dry:
             status, msg = "geplant", "Trockenlauf – nichts kopiert"
             nbytes = f["size"] or 0
+        elif f["computer_id"] == "cloud-api":
+            # Datei liegt in OneDrive/Google Drive → serverseitig innerhalb derselben Cloud kopieren (kein Download)
+            status, msg, dst = _cloud_copy(f, folder_cache)
+            nbytes = (f["size"] or 0) if status == "kopiert" else 0
+            if status == "kopiert":
+                stats["cloud_serverseitig"] += 1
         elif f["computer_id"] not in local:
             if db.one("SELECT 1 FROM copy_ops WHERE file_id=? AND status IN ('geplant','kopiert')", (f["id"],)):
                 stats["übersprungen"] += 1

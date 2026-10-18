@@ -90,6 +90,8 @@ def settings():
         "llm": {**s.llm, "anthropic_key_present": bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))},
         "analysis": s.analysis,
         "cloud": s.cloud,
+        "cloud_api": {"download_content": bool((s.raw.get("cloud_api") or {}).get("download_content")),
+                      "download_max_mb": (s.raw.get("cloud_api") or {}).get("download_max_mb", 25)},
         "cache": thumbcache.usage(),
         "llm_kosten": costs.totals(),
         "target_root": s.target_root,
@@ -108,6 +110,7 @@ class SettingsIn(BaseModel):
     thumbnails_mode: Optional[str] = None
     thumbs_budget_gb: Optional[float] = None
     download_online_only: Optional[bool] = None
+    cloud_download_content: Optional[bool] = None
     provider: Optional[str] = None
     anthropic_model: Optional[str] = None
     ollama_url: Optional[str] = None
@@ -140,6 +143,8 @@ def update_settings(body: SettingsIn):
             s.analysis[k] = upd.pop(k)
     if "download_online_only" in upd:
         s.cloud["download_online_only"] = upd.pop("download_online_only")
+    if "cloud_download_content" in upd:
+        s.raw.setdefault("cloud_api", {})["download_content"] = upd.pop("cloud_download_content")
     s.llm.update(upd)
     _persist_overrides()
     return settings()
@@ -162,7 +167,8 @@ def _persist_overrides():
     p.write_text(json.dumps({"llm": s.llm, "target_structure": s.target_structure, "ocr": s.analysis.get("ocr"),
                              "thumbnails_mode": s.analysis.get("thumbnails_mode"),
                              "thumbs_budget_gb": s.analysis.get("thumbs_budget_gb"),
-                             "download_online_only": s.cloud.get("download_online_only")},
+                             "download_online_only": s.cloud.get("download_online_only"),
+                             "cloud_download_content": (s.raw.get("cloud_api") or {}).get("download_content")},
                             ensure_ascii=False, indent=2), encoding="utf-8")
 
 
@@ -181,6 +187,8 @@ def load_overrides():
                 s.analysis[k] = d[k]
         if d.get("download_online_only") is not None:
             s.cloud["download_online_only"] = d["download_online_only"]
+        if d.get("cloud_download_content") is not None:
+            s.raw.setdefault("cloud_api", {})["download_content"] = d["cloud_download_content"]
 
 
 @router.get("/audit")

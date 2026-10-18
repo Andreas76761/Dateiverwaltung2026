@@ -260,6 +260,10 @@ MIGRATIONS = [
     "ALTER TABLE files ADD COLUMN online_only INTEGER DEFAULT 0",
     "ALTER TABLE files ADD COLUMN thumbs_complete INTEGER DEFAULT 0",
     "ALTER TABLE files ADD COLUMN rules_confidence REAL",
+    "ALTER TABLE files ADD COLUMN remote_id TEXT",        # ID der Datei in OneDrive/Google Drive (Cloud-Schnittstelle)
+    "ALTER TABLE files ADD COLUMN web_url TEXT",          # Link zum Öffnen in der Cloud
+    "ALTER TABLE files ADD COLUMN remote_hash TEXT",      # Prüfsumme der Cloud (quickXor/SHA-1/MD5), falls kein SHA-256
+    "CREATE INDEX IF NOT EXISTS ix_files_remote_hash ON files(remote_hash)",
     "CREATE INDEX IF NOT EXISTS ix_files_status ON files(status, missing)",
     "CREATE INDEX IF NOT EXISTS ix_files_size ON files(size)",
     "CREATE INDEX IF NOT EXISTS ix_files_order_imp ON files(pinned DESC, importance DESC)",
@@ -334,3 +338,13 @@ def sync_config_to_db() -> None:
                        ON CONFLICT(id) DO UPDATE SET name=excluded.name, path=excluded.path, kind=excluded.kind""",
                     (v["id"], comp["id"], v["name"], v["path"], v.get("kind", "internal")),
                 )
+        # Cloud-Konten über Schnittstelle (OneDrive/Google Drive): ein "Computer" mit je einem Laufwerk pro Konto
+        from .connectors import cloud_api
+        accs = cloud_api.accounts()
+        if accs:
+            c.execute("""INSERT INTO computers(id, name, os, mode) VALUES ('cloud-api', 'Cloud-Konten (API)', 'Cloud', 'cloud-api')
+                         ON CONFLICT(id) DO NOTHING""")
+            for a in accs:
+                c.execute("""INSERT INTO volumes(id, computer_id, name, path, kind) VALUES (?, 'cloud-api', ?, ?, 'cloud-api')
+                             ON CONFLICT(id) DO UPDATE SET name=excluded.name, path=excluded.path""",
+                          (a.volume_id, a.name, f"{a.provider}://{a.id}/{a.root.strip('/')}"))

@@ -248,7 +248,7 @@ export default function FileDetail({ id, onClose, onChanged }: { id: number; onC
         )}
 
         <a className="btn sm" href={rawUrl(f.id)} target="_blank" rel="noreferrer" style={{ alignSelf: "flex-start" }}>
-          <ExternalLink size={14} /> Original ansehen (nur lesen)
+          <ExternalLink size={14} /> {f.computer_id === "cloud-api" ? "In der Cloud öffnen" : "Original ansehen (nur lesen)"}
         </a>
       </div>
       {viewer && <PageViewer fileId={f.id} name={f.name} pages={f.thumbnails.length} start={viewer} onClose={() => setViewer(null)}

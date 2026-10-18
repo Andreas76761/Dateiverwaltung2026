@@ -90,7 +90,7 @@ export default function CopyPage({ go }: { go: (p: string) => void }) {
               <div className="grid g4" style={{ gap: 10 }}>
                 <div className="card kpi" style={{ boxShadow: "none" }}><div className="k-label">Kopiert</div><div className="k-val" style={{ color: "var(--ok)" }}>{fmtNum(st.kopiert)}</div><div className="k-sub">{fmtBytes(st.bytes)}</div></div>
                 <div className="card kpi" style={{ boxShadow: "none" }}><div className="k-label">Übersprungen</div><div className="k-val">{fmtNum(st["übersprungen"])}</div><div className="k-sub">bereits identisch im Ziel</div></div>
-                <div className="card kpi" style={{ boxShadow: "none" }}><div className="k-label">An Agenten</div><div className="k-val">{fmtNum(st["an_agent_übergeben"])}</div><div className="k-sub">andere Computer{st.nur_online ? ` · ☁ ${fmtNum(st.nur_online)} nur online übersprungen` : ""}</div></div>
+                <div className="card kpi" style={{ boxShadow: "none" }}><div className="k-label">An Agenten</div><div className="k-val">{fmtNum(st["an_agent_übergeben"])}</div><div className="k-sub">andere Computer{st.nur_online ? ` · ☁ ${fmtNum(st.nur_online)} nur online übersprungen` : ""}{st.cloud_serverseitig ? ` · ☁ ${fmtNum(st.cloud_serverseitig)} serverseitig in der Cloud kopiert` : ""}</div></div>
                 <div className="card kpi" style={{ boxShadow: "none" }}><div className="k-label">Fehler</div><div className="k-val" style={{ color: st.fehler ? "var(--bad)" : undefined }}>{fmtNum(st.fehler)}</div><div className="k-sub">{st.trockenlauf ? "Trockenlauf" : `von ${fmtNum(st.geplant)} geplant`}</div></div>
               </div>
               {groups.length > 0 && (

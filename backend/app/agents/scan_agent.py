@@ -35,10 +35,11 @@ def upsert_entries(conn, computer_id: str, volume_id: str, entries: list[dict]) 
         if row is None:
             cur = conn.execute(
                 """INSERT INTO files(computer_id, volume_id, path, rel_path, name, ext, file_type, mime, size, mtime, ctime,
-                   sha256, text_excerpt, page_count, scanned_at, status, online_only)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'eingelesen', ?)""",
+                   sha256, text_excerpt, page_count, scanned_at, status, online_only, remote_id, web_url, remote_hash)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'eingelesen', ?,?,?,?)""",
                 (computer_id, volume_id, e["path"], e["rel_path"], e["name"], ext, ftype, mime, e["size"], e["mtime"],
-                 e.get("ctime"), e.get("sha256"), e.get("text_excerpt"), e.get("page_count"), ts, online),
+                 e.get("ctime"), e.get("sha256"), e.get("text_excerpt"), e.get("page_count"), ts, online,
+                 e.get("remote_id"), e.get("web_url"), e.get("remote_hash")),
             )
             ids[e["rel_path"]] = cur.lastrowid
             db.fts_update(conn, cur.lastrowid)
@@ -49,15 +50,17 @@ def upsert_entries(conn, computer_id: str, volume_id: str, entries: list[dict]) 
                 conn.execute(
                     """UPDATE files SET path=?, size=?, mtime=?, ctime=?, sha256=?, quick_hash=NULL,
                        text_excerpt=COALESCE(?, text_excerpt), page_count=COALESCE(?, page_count), status='eingelesen',
-                       thumbs_complete=0, scanned_at=?, missing=0, online_only=? WHERE id=?""",
+                       thumbs_complete=0, scanned_at=?, missing=0, online_only=?, remote_id=COALESCE(?, remote_id),
+                       web_url=COALESCE(?, web_url), remote_hash=? WHERE id=?""",
                     (e["path"], e["size"], e["mtime"], e.get("ctime"), e.get("sha256"), e.get("text_excerpt"),
-                     e.get("page_count"), ts, online, row["id"]),
+                     e.get("page_count"), ts, online, e.get("remote_id"), e.get("web_url"), e.get("remote_hash"), row["id"]),
                 )
                 db.fts_update(conn, row["id"])
             else:
                 conn.execute(
-                    "UPDATE files SET path=?, scanned_at=?, missing=0, online_only=?, sha256=COALESCE(?, sha256) WHERE id=?",
-                    (e["path"], ts, online, e.get("sha256"), row["id"]),
+                    """UPDATE files SET path=?, scanned_at=?, missing=0, online_only=?, sha256=COALESCE(?, sha256),
+                       remote_id=COALESCE(?, remote_id), web_url=COALESCE(?, web_url), remote_hash=COALESCE(?, remote_hash) WHERE id=?""",
+                    (e["path"], ts, online, e.get("sha256"), e.get("remote_id"), e.get("web_url"), e.get("remote_hash"), row["id"]),
                 )
             ids[e["rel_path"]] = row["id"]
     return ids
@@ -192,28 +195,32 @@ def compute_duplicates(job: Job | None = None) -> dict:
     return refresh_dup_groups() | {"schnellprüfsummen": quick, "prüfsummen_berechnet": hashed}
 
 
+# Duplikat-Schlüssel: SHA-256 (lokal und z. B. Google Drive/OneDrive privat), sonst Cloud-Prüfsumme desselben Anbieters
+DUPKEY = "COALESCE(sha256, CASE WHEN remote_hash IS NOT NULL THEN 'r:' || remote_hash END)"
+
+
 def refresh_dup_groups() -> dict:
     with db.tx() as c:
         c.execute("UPDATE files SET dup_group=NULL, dup_count=1, is_primary=1")
         groups = c.execute(
-            """SELECT sha256, COUNT(*) n, SUM(size) total, MAX(size) sz FROM files
-               WHERE sha256 IS NOT NULL AND missing=0 GROUP BY sha256 HAVING n>1"""
+            f"""SELECT {DUPKEY} AS k, COUNT(*) n, SUM(size) total, MAX(size) sz FROM files
+               WHERE {DUPKEY} IS NOT NULL AND missing=0 GROUP BY k HAVING n>1"""
         ).fetchall()
         wasted = 0
         for g in groups:
             members = c.execute(
-                """SELECT f.id FROM files f JOIN volumes v ON v.id=f.volume_id
-                   WHERE f.sha256=? AND f.missing=0
+                f"""SELECT f.id FROM files f JOIN volumes v ON v.id=f.volume_id
+                   WHERE {DUPKEY.replace("sha256", "f.sha256").replace("remote_hash", "f.remote_hash")}=? AND f.missing=0
                    ORDER BY f.pinned DESC,
                             CASE WHEN f.name LIKE '%(_)%' OR f.name LIKE '%kopie%' OR f.name LIKE '%copy%' THEN 1 ELSE 0 END,
-                            CASE v.kind WHEN 'cloud' THEN 0 WHEN 'internal' THEN 1 ELSE 2 END,
+                            CASE v.kind WHEN 'cloud' THEN 0 WHEN 'cloud-api' THEN 0 WHEN 'internal' THEN 1 ELSE 2 END,
                             f.ctime ASC, length(f.rel_path) ASC""",
-                (g["sha256"],),
+                (g["k"],),
             ).fetchall()
             ids = [m["id"] for m in members]
             c.execute(
                 f"UPDATE files SET dup_group=?, dup_count=?, is_primary=0 WHERE id IN ({','.join('?' * len(ids))})",
-                (g["sha256"], len(ids), *ids),
+                (g["k"], len(ids), *ids),
             )
             c.execute("UPDATE files SET is_primary=1 WHERE id=?", (ids[0],))
             wasted += g["total"] - g["sz"]
@@ -235,6 +242,47 @@ def rescore_duplicates() -> None:
             c.execute("UPDATE files SET importance=?, importance_reason=? WHERE id=?", (score, reason, f["id"]))
 
 
+def scan_cloud_accounts(job: Job, wanted: set[str], counters: dict) -> dict:
+    """Verbundene Cloud-Konten über die Schnittstelle einlesen (nur Metadaten, kein Download)."""
+    from ..connectors import cloud_api
+
+    res = {"cloud_konten": 0, "cloud_dateien": 0, "cloud_hinweise": []}
+    for acc in cloud_api.accounts():
+        if (wanted and acc.volume_id not in wanted) or not cloud_api.status(acc)["connected"]:
+            continue
+        job.update(message=f"Lese {acc.name} über die Cloud-Schnittstelle …", **counters)
+        started = db.now()
+        batch: list[dict] = []
+        n = 0
+        try:
+            for e in cloud_api.provider(acc, cloud_api.TRANSPORT).list_files():
+                if job.cancelled:
+                    break
+                e["path"] = f"{acc.provider}://{acc.id}/{acc.root.strip('/') + '/' if acc.root.strip('/') else ''}{e['rel_path']}"
+                batch.append(e)
+                n += 1
+                if len(batch) >= BATCH:
+                    with db.tx() as c:
+                        upsert_entries(c, "cloud-api", acc.volume_id, batch)
+                    batch.clear()
+                    job.update(message=f"{acc.name}: {n} Dateien", **counters)
+            if batch:
+                with db.tx() as c:
+                    upsert_entries(c, "cloud-api", acc.volume_id, batch)
+            with db.tx() as c:
+                if not job.cancelled and not acc.max_items:
+                    cur = c.execute("UPDATE files SET missing=1 WHERE volume_id=? AND scanned_at < ?", (acc.volume_id, started))
+                    counters["nicht_mehr_gefunden"] += cur.rowcount
+                c.execute("UPDATE volumes SET last_scan=? WHERE id=?", (db.now(), acc.volume_id))
+                c.execute("UPDATE computers SET last_seen=? WHERE id='cloud-api'", (db.now(),))
+            res["cloud_konten"] += 1
+            res["cloud_dateien"] += n
+            counters["dateien"] += n
+        except cloud_api.CloudError as exc:
+            res["cloud_hinweise"].append(f"{acc.name}: {exc}")
+    return res
+
+
 def run(job: Job, params: dict) -> dict:
     s = get_settings()
     wanted = set(params.get("volume_ids") or [])
@@ -251,6 +299,7 @@ def run(job: Job, params: dict) -> dict:
             break
         job.update(message=f"Lese {vol['name']} …", **counters)
         scan_volume(job, vol, counters)
+    counters.update(scan_cloud_accounts(job, wanted, counters))
     job.update(message="Duplikate werden ermittelt …", **counters)
     counters.update(compute_duplicates(job))
     job.update(progress=counters["dateien"], total=counters["dateien"], message="Einlesen abgeschlossen", **counters)

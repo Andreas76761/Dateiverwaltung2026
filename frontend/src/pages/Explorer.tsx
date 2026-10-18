@@ -87,7 +87,7 @@ function PageStrip({ f, selected, onOpen, onPage, onChanged }: { f: FileItem; se
 type Sel = { computer?: string; volume?: string; folder?: string };
 
 function VolumeIcon({ kind }: { kind: string }) {
-  if (kind === "cloud") return <Cloud size={14} color="var(--beruf)" />;
+  if (kind === "cloud" || kind === "cloud-api") return <Cloud size={14} color="var(--beruf)" />;
   if (kind === "external") return <Usb size={14} color="var(--warn)" />;
   return <HardDrive size={14} color="var(--text-3)" />;
 }

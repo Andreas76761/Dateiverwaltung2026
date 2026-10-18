@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import db, jobs
-from .api import agents, files, pipeline, system
+from .api import agents, cloud, files, pipeline, system
 from .config import PROJECT_ROOT, get_settings
 from .middleware import ApiKeyMiddleware, AuditMiddleware, NoDeleteMiddleware
 
@@ -56,7 +56,7 @@ app.add_middleware(ApiKeyMiddleware)
 app.add_middleware(NoDeleteMiddleware)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST"], allow_headers=["*"])
 
-for r in (files.router, pipeline.router, system.router, agents.router):
+for r in (files.router, pipeline.router, system.router, agents.router, cloud.router):
     app.include_router(r)
 
 if FRONTEND_DIST.exists():

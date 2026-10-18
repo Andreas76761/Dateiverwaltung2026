@@ -30,6 +30,7 @@ export interface FileItem {
   thumbs: number;
   thumbs_complete: number;  // 0 = bisher nur Deckblatt im Cache
   online_only: number;      // Cloud-Platzhalter: Inhalt liegt nur online
+  web_url?: string | null;  // Cloud-Schnittstelle: Link zum Öffnen in OneDrive/Google Drive
   thumb_labels: string[]; // Video-Zeitpunkte bzw. "E-Mail · S. 1" / "Anhang: …"
   computer_name: string;
   volume_name: string;

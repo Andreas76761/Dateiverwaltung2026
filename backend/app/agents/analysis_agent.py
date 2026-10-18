@@ -36,7 +36,7 @@ def _local_computers() -> set[str]:
 
 
 def _readable(f: dict, local: bool) -> bool:
-    if not local or not os.path.isfile(f["path"]):
+    if not local or not os.path.isfile(str(f["path"])):
         return False
     return not f.get("online_only") or bool(get_settings().cloud.get("download_online_only"))
 
@@ -115,8 +115,59 @@ def finalize(f: dict, ctx: dict, result: dict, provider: str, rules_conf: float 
     return stat
 
 
+def _is_cloud_api(f: dict) -> bool:
+    return f.get("computer_id") == "cloud-api"
+
+
+def cloud_cover(f: dict) -> int:
+    """Deckblatt-Miniatur direkt von OneDrive/Google Drive holen (ohne die Datei herunterzuladen)."""
+    from ..connectors import cloud_api
+
+    p = cloud_api.provider_for_volume(f["volume_id"])
+    if not p or not f.get("remote_id"):
+        return 0
+    try:
+        data = p.thumbnail(f["remote_id"])
+    except cloud_api.CloudError:
+        return 0
+    if not data:
+        return 0
+    from io import BytesIO
+
+    from PIL import Image
+
+    out_dir = get_settings().thumbs_dir / str(f["id"])
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / "p0001.jpg"
+    with Image.open(BytesIO(data)) as im:
+        im = im.convert("RGB")
+        im.save(path, "JPEG", quality=78)
+        thumb = {"page": 1, "path": str(path), "width": im.width, "height": im.height, "bytes": path.stat().st_size}
+    total = f.get("page_count") or (1 if f.get("file_type") == "Bild" else 2)  # unbekannte Seitenzahl → "alle Seiten laden" anbieten
+    thumbcache.store(f["id"], [thumb], total)
+    return 1
+
+
 def analyze_file(f: dict, local: bool, params: dict, meter: CostMeter) -> dict:
-    """Einzelanalyse (synchron)."""
+    """Einzelanalyse (synchron). Cloud-Dateien (Schnittstelle) werden nur bei erlaubtem Download gelesen."""
+    if _is_cloud_api(f):
+        from ..connectors import cloud_api
+
+        with cloud_api.downloaded(f) as dl:
+            if dl:  # vorübergehend heruntergeladen → wie eine lokale Datei analysieren
+                st = _analyze(f, True, params, meter, path_override=dl)
+                st["cloud_inhalt"] = 1
+                return st
+        st = _analyze(f, False, params, meter)
+        if thumbnails.supports(f["ext"] or ""):
+            st["miniaturen"] = st.get("miniaturen", 0) + cloud_cover(f)
+        return st
+    return _analyze(f, local, params, meter)
+
+
+def _analyze(f: dict, local: bool, params: dict, meter: CostMeter, path_override: tuple[str, str] | None = None) -> dict:
+    if path_override:  # Inhalt aus der Temp-Kopie lesen; Datensatz bleibt die Cloud-Datei
+        f = {**f, "path": path_override[0], "ext": path_override[1] or f["ext"], "online_only": 0}
     ctx = prepare(f, local)
     rules = rules_result(f, ctx)
     stat = {"ocr": ctx["ocr_done"], "llm_fallback": 0, "nur_regeln": 0, "llm": 0, "kostenlimit": 0}

@@ -31,7 +31,8 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         key = get_settings().api_key
-        if key and request.url.path.startswith("/api") and request.url.path != "/api/health":
+        # Ausnahmen: Health-Check und die OAuth-Rückleitung der Cloud (abgesichert über den einmaligen state)
+        if key and request.url.path.startswith("/api") and request.url.path not in ("/api/health", "/api/cloud/callback"):
             supplied = request.headers.get("x-api-key") or request.query_params.get("key")
             if supplied != key:
                 return JSONResponse({"detail": "Ungültiger oder fehlender API-Key"}, status_code=401)

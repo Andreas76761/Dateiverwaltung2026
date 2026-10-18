@@ -180,6 +180,9 @@ def generate(file_id: int, path: str, ext: str, max_pages: int | None = None) ->
     return render_to(path, ext, out_dir, min(max_pages or limit, limit), int(s.analysis.get("video_frames", 8)))
 
 
+CLOUD_NATIVE = {".gdoc", ".gsheet", ".gslides", ".gdraw"}  # Google-Formate: Deckblatt kommt von der Cloud
+
+
 def supports(ext: str) -> bool:
-    return (ext == ".pdf" or ext in OFFICE_PAGED or ext in IMAGE_EXTS or ext in mail.MAIL_EXTS
+    return (ext == ".pdf" or ext in CLOUD_NATIVE or ext in OFFICE_PAGED or ext in IMAGE_EXTS or ext in mail.MAIL_EXTS
             or (ext in video.VIDEO_EXTS and video.available()))

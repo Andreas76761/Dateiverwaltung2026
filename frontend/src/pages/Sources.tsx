@@ -1,6 +1,7 @@
 import { Cloud, HardDrive, Laptop, Play, Server, Usb, Wifi, WifiOff } from "lucide-react";
 import { get, post } from "../api";
 import { useAsync, useJobs, useToast } from "../components/ui";
+import CloudAccounts from "../components/CloudAccounts";
 import type { Computer } from "../types";
 import { fmtBytes, fmtDate, fmtNum } from "../util";
 
@@ -49,13 +50,13 @@ export default function Sources() {
               <tbody>
                 {c.volumes.map((v) => (
                   <tr key={v.id} style={{ cursor: "default" }}>
-                    <td style={{ width: 28 }}>{v.kind === "cloud" ? <Cloud size={16} color="var(--beruf)" /> : v.kind === "external" ? <Usb size={16} color="var(--warn)" /> : <HardDrive size={16} color="var(--text-3)" />}</td>
+                    <td style={{ width: 28 }}>{v.kind === "cloud" || v.kind === "cloud-api" ? <Cloud size={16} color="var(--beruf)" /> : v.kind === "external" ? <Usb size={16} color="var(--warn)" /> : <HardDrive size={16} color="var(--text-3)" />}</td>
                     <td>
                       <div style={{ fontWeight: 550 }}>{v.name}</div>
                       <div className="mono faint ellipsis" style={{ maxWidth: 300 }} title={v.path}>{v.path}</div>
                     </td>
                     <td className="nowrap">{fmtNum(v.files)} Dateien<div className="faint" style={{ fontSize: 11.5 }}>{fmtBytes(v.bytes)} · {fmtNum(v.analyzed)} analysiert</div></td>
-                    <td className="nowrap">{c.mode === "agent" ? <span className="faint" style={{ fontSize: 12 }}>via Agent</span> : v.reachable ? <button className="btn sm" onClick={() => scanVol(v.id)}><Play size={12} /> Einlesen</button> : <span className="badge bad"><WifiOff size={11} /> nicht erreichbar</span>}</td>
+                    <td className="nowrap">{c.mode === "cloud-api" ? <span className="faint" style={{ fontSize: 12 }}>über Schnittstelle</span> : c.mode === "agent" ? <span className="faint" style={{ fontSize: 12 }}>via Agent</span> : v.reachable ? <button className="btn sm" onClick={() => scanVol(v.id)}><Play size={12} /> Einlesen</button> : <span className="badge bad"><WifiOff size={11} /> nicht erreichbar</span>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -63,6 +64,8 @@ export default function Sources() {
           </div>
         ))}
       </div>
+
+      <CloudAccounts />
 
       <div className="grid g2">
         <div className="card card-pad col" style={{ gap: 10 }}>

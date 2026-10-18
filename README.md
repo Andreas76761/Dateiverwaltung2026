@@ -26,6 +26,10 @@ Erweiterung: `inventory_agent` – installierte Programme, LLM-Lösungen (Ollama
 
 Optionale Systemprogramme: **Tesseract** (OCR, Sprachpaket `deu`) und **LibreOffice** (Miniaturen für PPTX/DOCX/XLSX). Für Videos wird ffmpeg genutzt – aus dem PATH oder automatisch über das Python-Paket `imageio-ffmpeg`. Ohne sie läuft alles weiter, nur ohne OCR bzw. ohne Office-Miniaturen.
 
+## Cloud-Konten über Schnittstelle
+
+OneDrive/SharePoint (Microsoft Graph) und Google Drive lassen sich zusätzlich direkt anbinden: Einlesen **aller** Cloud-Dateien ohne Download, Duplikate zwischen lokal und Cloud, Deckblatt-Miniaturen von der Cloud und in Schritt 4 **serverseitige Kopien** in einen neuen Cloud-Ordner. Der Cloud-Client kann technisch nur lesen, Ordner anlegen und kopieren – nie löschen, verschieben oder überschreiben. Einrichtung: **[docs/CLOUD-API.md](docs/CLOUD-API.md)**.
+
 ## Probelauf auf einem echten Computer
 
 Vor dem echten Einsatz: **[docs/PROBELAUF.md](docs/PROBELAUF.md)** – ein Ordner, Dateilimit, Trockenlauf, Vorher/Nachher-Nachweis, dass nichts verändert wurde, und ein Bericht zum Zurückmelden:

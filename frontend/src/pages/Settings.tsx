@@ -29,7 +29,7 @@ export default function Settings() {
     if (s.data) setForm({ provider: s.data.llm.provider, anthropic_model: s.data.llm.anthropic_model, ollama_url: s.data.llm.ollama_url, ollama_model: s.data.llm.ollama_model, send_content_to_cloud: s.data.llm.send_content_to_cloud, target_structure: s.data.target_structure, ocr: s.data.analysis.ocr,
       mode: s.data.llm.mode, batch: s.data.llm.batch, max_cost_usd: s.data.llm.max_cost_usd,
       thumbnails_mode: s.data.analysis.thumbnails_mode, thumbs_budget_gb: s.data.analysis.thumbs_budget_gb,
-      download_online_only: s.data.cloud.download_online_only });
+      download_online_only: s.data.cloud.download_online_only, cloud_download_content: s.data.cloud_api.download_content });
   }, [s.data]);
   if (!s.data || !form) return <div className="faint">Lädt …</div>;
   const save = async () => {
@@ -143,6 +143,9 @@ export default function Settings() {
             {form.download_online_only
               ? <div className="callout warn" style={{ fontSize: 12 }}>Achtung: Analyse und Kopie laden Nur-online-Dateien herunter – bei großen Cloud-Ablagen kann die Festplatte volllaufen.</div>
               : <span className="faint" style={{ fontSize: 11.5 }}>Standard: nur Metadaten (Name, Pfad, Größe, Datum) – es wird nichts heruntergeladen.</span>}
+            <label className="switch"><input type="checkbox" checked={!!form.cloud_download_content} onChange={(e) => setForm({ ...form, cloud_download_content: e.target.checked })} />
+              Cloud-Konten (Schnittstelle): Inhalte für die Analyse vorübergehend laden (bis {s.data.cloud_api.download_max_mb} MB je Datei)</label>
+            <span className="faint" style={{ fontSize: 11.5 }}>Aus: Einordnung nach Name/Pfad/Metadaten, Deckblatt kommt direkt von der Cloud. An: Text, OCR und alle Seiten – die Datei wird nur temporär geladen und danach verworfen.</span>
           </div>
           <div className="col" style={{ gap: 5, fontSize: 12.5 }}>
             <div className="row"><Ok v={s.data.ocr_available} /> Tesseract OCR</div>

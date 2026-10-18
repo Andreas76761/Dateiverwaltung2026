@@ -76,6 +76,27 @@ computers:
       - { id: gdrive, name: Google Drive (Cloud), path: ./demo/cloud/GoogleDrive, kind: cloud }
       - { id: nextcloud, name: Nextcloud (Cloud), path: ./demo/cloud/Nextcloud, kind: cloud }
 
+# Cloud-Konten direkt über die Schnittstelle (OneDrive/SharePoint via Microsoft Graph, Google Drive).
+# Einrichtung inkl. App-Registrierung: docs/CLOUD-API.md
+cloud_api:
+  download_content: false        # true = Inhalte für die Analyse vorübergehend laden
+  download_max_mb: 25
+  accounts: []
+  # - id: onedrive-andreas
+  #   provider: onedrive
+  #   name: OneDrive Andreas
+  #   client_id: "<Anwendungs-ID aus Entra/Azure>"
+  #   tenant: consumers            # consumers | organizations | common | <Verzeichnis-ID>
+  #   root: /
+  #   target_folder: Future-Dateiverwaltung
+  # - id: gdrive-andreas
+  #   provider: gdrive
+  #   name: Google Drive
+  #   client_id: "<…apps.googleusercontent.com>"
+  #   client_secret: "<…>"
+  #   root: /
+  #   target_folder: Future-Dateiverwaltung
+
 # Cloud-Dateien, die nur online liegen (Platzhalter von OneDrive/Google Drive/iCloud/Dropbox/Nextcloud)
 cloud:
   download_online_only: false   # false = nur Metadaten, nichts herunterladen (empfohlen)

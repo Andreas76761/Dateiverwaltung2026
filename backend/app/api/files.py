@@ -70,7 +70,7 @@ def _filters(q, computer, volume, group, category, label, file_type, ext, review
 
 LIST_COLS = """f.id, f.computer_id, f.volume_id, f.path, f.rel_path, f.name, f.ext, f.file_type, f.size, f.mtime, f.ctime,
   f.page_count, f.summary, f.category, f.group_name, f.confidence, f.importance, f.suggested_path, f.final_path,
-  f.review_status, f.dup_count, f.is_primary, f.status, f.pinned, f.missing, f.online_only, f.thumbs_complete,
+  f.review_status, f.dup_count, f.is_primary, f.status, f.pinned, f.missing, f.online_only, f.thumbs_complete, f.web_url,
   (SELECT group_concat(label, '|') FROM labels l WHERE l.file_id=f.id) labels,
   (SELECT COUNT(*) FROM thumbnails t WHERE t.file_id=f.id) thumbs,
   (SELECT group_concat(COALESCE(t.label, ''), '|') FROM thumbnails t WHERE t.file_id=f.id AND f.file_type IN ('Video', 'E-Mail')) thumb_labels,
@@ -183,6 +183,14 @@ def ensure_thumbs(file_id: int, download: bool = False):
     if f["thumbs_complete"]:
         return {"pages": db.one("SELECT COUNT(*) n FROM thumbnails WHERE file_id=?", (file_id,))["n"], "complete": True}
     local = {c["id"] for c in get_settings().computers if c["mode"] == "local"}
+    if f["computer_id"] == "cloud-api":
+        from ..connectors import cloud_api
+        with cloud_api.downloaded(f) as dl:
+            if not dl:
+                raise HTTPException(409, "Cloud-Datei: Für alle Seiten muss sie vorübergehend heruntergeladen werden – "
+                                         "in den Einstellungen „Cloud-Inhalte laden“ aktivieren")
+            r = thumbcache.ensure_all({**f, "path": dl[0], "ext": dl[1] or f["ext"]})
+        return {**r, "complete": True}
     if f["computer_id"] not in local:
         raise HTTPException(409, "Datei liegt auf einem Agent-Computer – Seiten erzeugt der Agent beim nächsten Scan")
     if f["online_only"] and not (download or get_settings().cloud.get("download_online_only")):
@@ -196,7 +204,10 @@ def ensure_thumbs(file_id: int, download: bool = False):
 @router.get("/files/{file_id}/raw")
 def raw(file_id: int):
     """Original zum Ansehen öffnen (nur lesend, nur Dateien dieses Servers)."""
-    f = db.one("SELECT path, mime, name, computer_id FROM files WHERE id=?", (file_id,))
+    f = db.one("SELECT path, mime, name, computer_id, web_url FROM files WHERE id=?", (file_id,))
+    if f and f["computer_id"] == "cloud-api" and f["web_url"]:
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(f["web_url"])  # Cloud-Datei im Browser bei OneDrive/Google öffnen
     local = {c["id"] for c in get_settings().computers if c["mode"] == "local"}
     if not f or f["computer_id"] not in local or not os.path.isfile(f["path"]):
         raise HTTPException(404, "Original auf diesem Server nicht verfügbar")
