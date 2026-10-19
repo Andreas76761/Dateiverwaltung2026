@@ -1,4 +1,5 @@
 """Punkt 5 – Anmeldung & HTTPS: lokal vs. Netzwerk, erstes Konto, Rollen, CSRF, Sperre, API-Key, Zertifikate."""
+import os
 import ssl
 import sys
 from pathlib import Path
@@ -98,7 +99,8 @@ def test_lockout_and_api_key(apps):
     assert agent.get(f"/api/agents/pc/config", headers={"X-API-Key": "falsch"}).status_code == 401
     assert agent.get(f"/api/agents/pc/config", headers={"X-API-Key": key}).status_code == 200
     from app import auth
-    assert (auth._secrets_file().stat().st_mode & 0o777) == 0o600
+    if os.name != "nt":  # Unix-Dateirechte; unter Windows schützt das Benutzerprofil
+        assert (auth._secrets_file().stat().st_mode & 0o777) == 0o600
 
 
 def test_tls_certificates(apps):
@@ -132,7 +134,8 @@ def test_tls_certificates(apps):
     leaf = x509.load_pem_x509_certificate(p["cert"].read_bytes())
     ca = x509.load_pem_x509_certificate(p["ca"].read_bytes())
     leaf.verify_directly_issued_by(ca)
-    assert (p["key"].stat().st_mode & 0o777) == 0o600
+    if os.name != "nt":
+        assert (p["key"].stat().st_mode & 0o777) == 0o600
     assert local.get("/api/auth/ca.pem").text.startswith("-----BEGIN CERTIFICATE-----")
     fp_before = tls.fingerprint()
     tls.ensure()

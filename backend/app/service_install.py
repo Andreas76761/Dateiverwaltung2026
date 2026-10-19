@@ -36,6 +36,10 @@ LABEL = {"agent": "de.future-dateiverwaltung.agent", "server": "de.future-dateiv
 TITLE = {"agent": "Future Dateiverwaltung Agent", "server": "Future Dateiverwaltung Server"}
 
 
+def _uid() -> str:
+    return str(os.getuid()) if hasattr(os, "getuid") else "501"  # getuid gibt es nur unter macOS/Linux
+
+
 def conf_dir() -> Path:
     if platform.system() == "Windows":
         return Path(os.environ.get("APPDATA", Path.home())) / "FutureDateiverwaltung"
@@ -190,7 +194,7 @@ def install(role: str, cmd: list[str], env: dict, dry: bool = False) -> Path:
         _run(["schtasks", "/Create", "/TN", TITLE[role], "/XML", str(path), "/F"], dry)
         _run(["schtasks", "/Run", "/TN", TITLE[role]], dry)
     elif system == "Darwin":
-        uid = str(os.getuid())
+        uid = _uid()
         _run(["launchctl", "bootout", f"gui/{uid}/{LABEL[role]}"], dry)  # evtl. alte Version beenden
         _run(["launchctl", "bootstrap", f"gui/{uid}", str(path)], dry)
     else:
@@ -211,7 +215,7 @@ def uninstall(role: str, dry: bool = False) -> None:
         _run(["schtasks", "/End", "/TN", TITLE[role]], dry)
         _run(["schtasks", "/Delete", "/TN", TITLE[role], "/F"], dry)
     elif system == "Darwin":
-        _run(["launchctl", "bootout", f"gui/{os.getuid()}/{LABEL[role]}"], dry)
+        _run(["launchctl", "bootout", f"gui/{_uid()}/{LABEL[role]}"], dry)
     elif shutil.which("systemctl"):
         _run(["systemctl", "--user", "disable", "--now", f"fdv-{role}.service"], dry)
     if path.exists() and not dry:
@@ -228,7 +232,7 @@ def show_status() -> None:
             if system == "Windows":
                 _run(["schtasks", "/Query", "/TN", TITLE[role]], False)
             elif system == "Darwin":
-                _run(["launchctl", "print", f"gui/{os.getuid()}/{LABEL[role]}"], False)
+                _run(["launchctl", "print", f"gui/{_uid()}/{LABEL[role]}"], False)
             elif shutil.which("systemctl"):
                 _run(["systemctl", "--user", "--no-pager", "status", f"fdv-{role}.service"], False)
 

@@ -182,7 +182,7 @@ def test_service_install_render(system, tmp_path, monkeypatch, capsys):
     marker = {"Windows": "LogonTrigger", "Darwin": "RunAtLoad", "Linux": "Restart=on-failure"}[system]
     assert marker in unit
     assert calls and "agent.json" in out
-    if system != "Windows":
+    if system != "Windows" and os.name != "nt":
         assert (conf.stat().st_mode & 0o777) == 0o600
     calls.clear()
     si.main(["entfernen", "agent"])

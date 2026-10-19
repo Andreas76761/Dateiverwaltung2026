@@ -79,7 +79,7 @@ export function UserMenu({ st, reload }: { st: AuthStatus; reload: () => void })
   if (!st.user) {
     return st.mode === "aus" ? null : (
       <a className="badge warn" href="#/settings?zugang=1" title="Ohne Konto ist die App nur auf diesem Computer erreichbar">
-        <KeyRound size={11} /> Kein Konto – nur lokal
+        <KeyRound size={11} /> <span className="hide-sm">Kein Konto – nur lokal</span>
       </a>
     );
   }
