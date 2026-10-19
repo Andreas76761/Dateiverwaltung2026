@@ -19,6 +19,11 @@ from pathlib import Path
 from .config import get_settings
 
 
+
+def _cn(name: str) -> str:
+    """Zertifikatsname höchstens 64 Zeichen (lange Mac-Rechnernamen); gültig ist ohnehin der SAN-Eintrag."""
+    return name if len(name) <= 64 else name[:61] + "..."
+
 def tls_dir() -> Path:
     d = get_settings().data_dir / "tls"
     d.mkdir(parents=True, exist_ok=True)
@@ -77,7 +82,7 @@ def ensure(extra_names: list[str] | None = None) -> dict[str, Path]:
         ca_key = serialization.load_pem_private_key(p["ca_key"].read_bytes(), None)
     else:
         ca_key = ec.generate_private_key(ec.SECP256R1())
-        ca_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, f"Future Dateiverwaltung CA ({socket.gethostname()})")])
+        ca_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, _cn(f"Future Dateiverwaltung CA ({socket.gethostname()})"))])
         ca_cert = (x509.CertificateBuilder().subject_name(ca_name).issuer_name(ca_name).public_key(ca_key.public_key())
                    .serial_number(x509.random_serial_number()).not_valid_before(now - dt.timedelta(minutes=5))
                    .not_valid_after(now + dt.timedelta(days=3650))
@@ -101,7 +106,7 @@ def ensure(extra_names: list[str] | None = None) -> dict[str, Path]:
             pass
     key = ec.generate_private_key(ec.SECP256R1())
     cert = (x509.CertificateBuilder()
-            .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, socket.gethostname() or "localhost")]))
+            .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, _cn(socket.gethostname() or "localhost"))]))
             .issuer_name(ca_cert.subject).public_key(key.public_key()).serial_number(x509.random_serial_number())
             .not_valid_before(now - dt.timedelta(minutes=5)).not_valid_after(now + dt.timedelta(days=825))
             .add_extension(x509.SubjectAlternativeName(san), critical=False)
