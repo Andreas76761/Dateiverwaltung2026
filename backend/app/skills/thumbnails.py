@@ -48,7 +48,7 @@ def _office_to_pdf(path: str) -> Path | None:
     return None
 
 
-def _render_pdf(pdf: str, out_dir: Path, max_pages: int, sheet: bool = False, start: int = 0,
+def _render_pdf(pdf: str | bytes, out_dir: Path, max_pages: int, sheet: bool = False, start: int = 0,
                 label: str | None = None) -> list[dict]:
     """Rendert jede Seite. Bei Tabellenblättern (beliebige Größe) wird das Format auf
     Querformat … A4-Hochformat begrenzt: flache Blätter weiß auffüllen, lange oben anschneiden."""
@@ -56,7 +56,7 @@ def _render_pdf(pdf: str, out_dir: Path, max_pages: int, sheet: bool = False, st
     from PIL import Image
 
     res = []
-    with pymupdf.open(pdf) as doc:
+    with (pymupdf.open(stream=pdf, filetype="pdf") if isinstance(pdf, bytes) else pymupdf.open(pdf)) as doc:
         for i, page in enumerate(doc):
             if i >= max_pages:
                 break
@@ -116,19 +116,20 @@ def _html_page(html: str, out_dir: Path, start: int, label: str) -> list[dict]:
     """Kleine Info-Seite (z. B. Archiv-Inhaltsverzeichnis) als Miniatur."""
     import pymupdf
 
-    with tempfile.TemporaryDirectory() as tmp:
-        f = Path(tmp) / "info.pdf"
-        story = pymupdf.Story(html=html, user_css="* { font-family: sans-serif; } body { font-size: 10pt; color: #0f172a; } "
-                                                     "h1 { font-size: 15pt; color: #312e81; } td { padding: 1pt 6pt 1pt 0; font-size: 9pt; } "
-                                                     ".m { color: #64748b; }")
-        writer = pymupdf.DocumentWriter(str(f))
-        rect = pymupdf.paper_rect("a4")
-        dev = writer.begin_page(rect)
-        story.place(rect + (36, 36, -36, -36))  # nur die erste Seite – reicht als Übersicht
-        story.draw(dev)
-        writer.end_page()
-        writer.close()
-        return _render_pdf(str(f), out_dir, 1, start=start, label=label)
+    import io
+
+    buf = io.BytesIO()  # nur im Speicher – keine Zwischendatei, die unter Windows gesperrt bleiben könnte
+    story = pymupdf.Story(html=html, user_css="* { font-family: sans-serif; } body { font-size: 10pt; color: #0f172a; } "
+                                                 "h1 { font-size: 15pt; color: #312e81; } td { padding: 1pt 6pt 1pt 0; font-size: 9pt; } "
+                                                 ".m { color: #64748b; }")
+    writer = pymupdf.DocumentWriter(buf)
+    rect = pymupdf.paper_rect("a4")
+    dev = writer.begin_page(rect)
+    story.place(rect + (36, 36, -36, -36))  # nur die erste Seite – reicht als Übersicht
+    story.draw(dev)
+    writer.end_page()
+    writer.close()
+    return _render_pdf(buf.getvalue(), out_dir, 1, start=start, label=label)
 
 
 def _render_archive(path: str, out_dir: Path, max_pages: int) -> tuple[list[dict], int]:
@@ -161,12 +162,13 @@ def _render_archive(path: str, out_dir: Path, max_pages: int) -> tuple[list[dict
                 if ext in IMAGE_EXTS:
                     res += _render_image(io.BytesIO(data), out_dir, start=len(res), label=lbl)
                     continue
+                if ext == ".pdf":
+                    res += _render_pdf(data, out_dir, min(3, max_pages - len(res)), start=len(res), label=lbl)
+                    continue
                 f = Path(tmp) / f"m{i}{ext}"  # eigener Dateiname – Pfade aus dem Archiv werden nie verwendet
                 f.write_bytes(data)
                 if ext in formats.HEIC_EXTS:
                     res += _render_image(str(f), out_dir, start=len(res), label=lbl, max_pages=1)
-                elif ext == ".pdf":
-                    res += _render_pdf(str(f), out_dir, min(3, max_pages - len(res)), start=len(res), label=lbl)
                 elif (pdf := _office_to_pdf(str(f))):
                     res += _render_pdf(str(pdf), out_dir, min(3, max_pages - len(res)), sheet=ext in SHEET_EXTS, start=len(res), label=lbl)
             except Exception:

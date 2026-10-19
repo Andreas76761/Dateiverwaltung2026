@@ -172,6 +172,7 @@ def test_service_install_render(system, tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(si.Path, "home", classmethod(lambda cls: tmp_path / "home"))
     calls = []
     monkeypatch.setattr(si.subprocess, "run", lambda *a, **k: calls.append(a[0]))
+    monkeypatch.setattr(si.shutil, "which", lambda name: f"/usr/bin/{name}")  # systemctl/launchctl/schtasks „vorhanden“
     si.main(["agent", "--server", "http://buero:8800", "--computer", "laptop", "--key", "GEHEIM", "--target", str(tmp_path / "ziel")])
     out = capsys.readouterr().out
     conf = si.conf_dir() / "agent.json"

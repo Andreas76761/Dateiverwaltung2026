@@ -1,4 +1,6 @@
 data/
+daten/
+!backend/tests/data/
 demo/
 frontend/node_modules/
 __pycache__/

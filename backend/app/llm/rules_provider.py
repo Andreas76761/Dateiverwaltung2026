@@ -94,7 +94,9 @@ class RulesProvider:
 
     def analyze(self, meta: dict, text: str) -> dict:
         name = meta["name"].lower()
-        path = meta["path"].lower().replace("\\", "/")
+        # Pfad innerhalb des Datenträgers: der Speicherort des Datenträgers selbst (z. B. …\AppData\Local\Temp
+        # oder D:\Sicherung) sagt nichts über die einzelne Datei aus
+        path = (meta.get("rel_path") or meta["path"]).lower().replace("\\", "/")
         folder = path.rsplit("/", 1)[0] if "/" in path else ""
         ext = (meta.get("ext") or "").lower()
         hay_name = f"{name} {path}"
