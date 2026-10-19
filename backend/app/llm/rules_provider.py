@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from ..categories import CATEGORIES, BY_ID
+from ..categories import BY_ID, CATEGORIES, CHAPTERS
 from ..skills.labels import rule_labels
 
 PATH_HINTS = {
@@ -80,6 +80,28 @@ MEDIA_TYPES = ("Bild", "Video", "Audio")
 MAIL_REPLY = re.compile(r"^(aw|wg|re|fw|fwd|antw)[\s:_-]", re.I)
 
 
+_CHAPTER_RX = {ch: re.compile(r"(?<![a-z0-9])(" + "|".join(map(re.escape, d["triggers"])) + r")(?![a-z0-9])")
+               for ch, d in CHAPTERS.items()}
+CH_NAME, CH_TEXT = 6.0, 3.5  # Kapitel im Namen/Pfad ist eindeutig; im Text etwas schwächer
+CH_OTHER = 0.25             # übrige Berufs-Kategorien treten zurück, wenn die Datei zu einem Kapitel gehört
+CH_KEEP = {"b_personal"}    # Dokumentart Bewerbung/Lebenslauf bleibt, auch wenn darin oneSCM vorkommt
+
+
+def chapter_hits(hay_name: str, hay_text: str) -> dict[str, float]:
+    """Welche Kapitel (z. B. oneSCM) die Datei erkennbar betreffen – mit Gewicht."""
+    out = {}
+    for ch, rx in _CHAPTER_RX.items():
+        if rx.search(hay_name):
+            out[ch] = CH_NAME
+        else:
+            # im Text nur, wenn es um das Kapitel GEHT: im Titel/Anfang oder mehrfach – eine Randnotiz
+            # (z. B. Budgetliste mit einer Zeile „oneSCM-Lizenzen“) reicht nicht
+            found = [m.start() for m in rx.finditer(hay_text)]
+            if found and (found[0] < 300 or len(found) >= 2):
+                out[ch] = CH_TEXT
+    return out
+
+
 def doc_type_hits(name: str, folder: str, title: str) -> dict[str, float]:
     scores: dict[str, float] = {}
     for hay, w in ((name, DT_NAME), (folder, DT_PATH), (title, DT_TITLE)):
@@ -112,8 +134,11 @@ class RulesProvider:
         # Medien mit sprechendem Namen (z. B. „Sprachmemo_Termin_Steuerberater.m4a“, „Personalausweis.jpg“):
         # der Name sagt mehr als die Endung
         topical_name = any(cid not in ("p_fotos", "p_videos", "p_musik") for kw in name_hits for cid in _KW_CATS[kw]) or bool(dtype)
+        chapters = chapter_hits(hay_name, hay_text)
         scores: dict[str, float] = {}
         for c in CATEGORIES:
+            if c.chapter and c.chapter not in chapters:
+                continue  # Kapitel-Kategorien nur für Dateien, die erkennbar dazugehören
             s = 0.0
             if ext and ext in c.exts:
                 weak = media and (content_len > 80 or topical_name)
@@ -130,6 +155,21 @@ class RulesProvider:
                 s *= 0.4  # Bild mit viel Text oder Dokumentnamen ist eher ein gescanntes Dokument
             if s:
                 scores[c.id] = s
+
+        for ch, w in chapters.items():
+            d = CHAPTERS[ch]
+            for cid in list(scores):
+                cat = BY_ID[cid]
+                if cat.group == d["group"] and not cat.chapter and cid not in CH_KEEP:
+                    target = d["doc_types"].get(cid)
+                    if target and dtype.get(cid):
+                        scores[target] = scores.get(target, 0.0) + dtype[cid]
+                    scores[cid] *= CH_OTHER
+            for cid in list(scores):
+                if BY_ID[cid].chapter == ch:
+                    scores[cid] += w * 0.5
+            scores.setdefault(d["default"], 0.0)
+            scores[d["default"]] += w * 0.6  # Auffang im Kapitel, wenn kein Thema genauer passt
 
         segs = set(re.split(r"[/_\-. ]+", path))
         for group, hints in PATH_HINTS.items():

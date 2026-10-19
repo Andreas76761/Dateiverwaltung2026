@@ -414,6 +414,20 @@ def main():
         "Nordwind Logistik GmbH an Muster AG\nLeistungszeitraum August 2025\nNetto 18.400,00 EUR, USt 19 %, Brutto 21.896,00 EUR\nZahlbar bis 30.09.2025."], 2025, 8)
     text(ws / "projects/scm-forecast/forecast.py",
          "import pandas as pd\n\ndef forecast(df):\n    \"\"\"Bedarfsprognose für die Disposition.\"\"\"\n    return df.rolling(4).mean()\n", 2025, 5)
+    # Kapitel oneSCM (Beruf) – eigener Projektordner
+    osc = pc_d / "Arbeit/oneSCM"
+    pptx(osc / "Lenkungskreis_2026-03.pptx", "oneSCM – Lenkungskreis März 2026", [
+        ("Status", "Programm oneSCM: Welle 1 live, Welle 2 im Test. Ampel gelb."),
+        ("Meilensteine", "Go-Live Welle 2: 01.07.2026 · Hypercare 6 Wochen"),
+        ("Entscheidungen", "Budgetfreigabe Welle 3, Key-User-Schulungen ab Mai")], 2026, color=(15, 118, 110))
+    xlsx(osc / "Test/Testfälle_UAT_Welle2.xlsx", "UAT", [["Nr", "Testfall", "Prozess", "Status"],
+         [1, "Bestellung anlegen", "Einkauf", "ok"], [2, "Wareneingang buchen", "Logistik", "offen"],
+         [3, "Disposition MRP-Lauf", "Planung", "Fehler"]], 2026)
+    word(osc / "Design/Fit-Gap_Einkauf.docx", "oneSCM Fit-Gap-Analyse Einkauf", [
+        "Soll-Prozess Bestellanforderung bis Rechnungsprüfung im SAP S/4HANA-Standard.",
+        "Gap 1: Lieferantenportal-Anbindung. Gap 2: Freigabestrategie."], 2025)
+    text(osc / "Protokoll_Jour_Fixe_2026-02-14.txt",
+         "oneSCM Jour fixe 14.02.2026\nTeilnehmer: Programmleitung, Teilprojekte\nEntscheidungen: Cutover-Termin bestätigt\nOffene Punkte: Stammdatenbereinigung", 2026, 2)
     word(pc_c / "Documents/Arbeit/Prozessbeschreibung_Wareneingang.docx", "Prozessbeschreibung Wareneingang (SOP)", [
         "Ziel: Einheitlicher Wareneingangsprozess im Lager.", "Schritt 1: Lieferschein prüfen.", "Schritt 2: Buchung im ERP / oneSCM.",
         "Verantwortlich: Lagerleitung."], 2023)

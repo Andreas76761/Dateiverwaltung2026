@@ -9,7 +9,7 @@ Ansicht, Analyse, Eingruppierung und sichere Archivierung **aller Dateien auf me
 | Schritt | Agent | Was passiert | Physische Änderung |
 |---|---|---|---|
 | 1 · Einlesen | `scan_agent` | Dateien je Computer / Festplatte / Cloud-Ordner erfassen, Prüfsummen für Duplikate | keine |
-| 2 · Analysieren | `analysis_agent` | Text, OCR, Miniaturen, LLM → 50 Kategorien → **Privat / Beruf / GenAI / Sonstiges**, Labels, Wichtigkeit, Pfadvorschlag | keine |
+| 2 · Analysieren | `analysis_agent` | Text, OCR, Miniaturen, LLM → 60 Kategorien → **Privat / Beruf (mit Kapitel oneSCM) / GenAI / Sonstiges**, Labels, Wichtigkeit, Pfadvorschlag | keine |
 | 3 · Vorschlag | `organizer_agent` | Virtuelle neue Ordnerstruktur, prüfen, umbenennen, verschieben, freigeben/ablehnen | keine |
 | 4 · Kopieren | `copy_agent` | Freigegebene Dateien als Kopie in den neuen Cloud-Ordner, SHA-256-verifiziert, mit Statistik | nur Kopien im Ziel |
 
@@ -218,13 +218,13 @@ backend/app
 ├── connectors/          local (Festplatten), cloud (Sync-Ordner-Erkennung), Agent-Push über api/agents.py
 ├── agents/              scan · analysis · organizer · copy · inventory
 ├── skills/              filetype · extract · ocr · thumbnails · labels · importance · pathsuggest
-├── llm/                 anthropic · ollama · rules  (+ 50 Kategorien in categories.py)
+├── llm/                 anthropic · ollama · rules  (+ 60 Kategorien und Kapitel in categories.py)
 ├── api/                 files (Explorer) · pipeline (Schritte, Vorschlag, Kopie) · system · agents
 └── agent_client.py      Agent für weitere Computer
 frontend/                React + TypeScript + Vite
 ```
 
-Frontend-Ansichten: Übersicht (Pipeline, KPIs) · Explorer (Baum Computer › Festplatte › Ordner, Suche in Name/Inhalt/OCR/Labels, Filter nach Bereich, 50 Kategorien, Dateityp, Label, Speicherdatum, Duplikaten, Prüfstatus; Sortierung nach Wichtigkeit, Datum, Typ …; Liste/Galerie/**Seiten** – in der Seitenansicht sind bei PDF, PPTX, DOCX, XLSX (ein Bild je Tabellenblatt), PNG und JPEG alle Seiten direkt als Miniaturen sichtbar, bei **Videos** Standbilder über die Laufzeit (mit Zeitmarke, Player im Detail) und bei **E-Mails** (.eml, Outlook .msg) die Mail-Seite plus alle Seiten der Anhänge, Klick öffnet die Großansicht mit ←/→; Navigation und Ordnerbaum einklappbar (Strg+B); Detail mit Miniaturen aller Seiten, Labels, OCR, Duplikaten, ähnlichen Dateien, Zielpfad) · Ähnliche Dateien (Gruppen mit Vorschau, Empfehlung ★) · Vorschlag & Prüfung · Kopieren & Statistik · Quellen & Agenten · Automatik (Zeitplan, Änderungsprotokoll, Agenten) · Programme & LLMs · Einstellungen.
+Frontend-Ansichten: Übersicht (Pipeline, KPIs) · Explorer (Baum Computer › Festplatte › Ordner, Suche in Name/Inhalt/OCR/Labels, Filter nach Bereich, 60 Kategorien, Dateityp, Label, Speicherdatum, Duplikaten, Prüfstatus; Sortierung nach Wichtigkeit, Datum, Typ …; Liste/Galerie/**Seiten** – in der Seitenansicht sind bei PDF, PPTX, DOCX, XLSX (ein Bild je Tabellenblatt), PNG und JPEG alle Seiten direkt als Miniaturen sichtbar, bei **Videos** Standbilder über die Laufzeit (mit Zeitmarke, Player im Detail) und bei **E-Mails** (.eml, Outlook .msg) die Mail-Seite plus alle Seiten der Anhänge, Klick öffnet die Großansicht mit ←/→; Navigation und Ordnerbaum einklappbar (Strg+B); Detail mit Miniaturen aller Seiten, Labels, OCR, Duplikaten, ähnlichen Dateien, Zielpfad) · Ähnliche Dateien (Gruppen mit Vorschau, Empfehlung ★) · Vorschlag & Prüfung · Kopieren & Statistik · Quellen & Agenten · Automatik (Zeitplan, Änderungsprotokoll, Agenten) · Programme & LLMs · Einstellungen.
 
 ## Entwicklung
 

@@ -10,7 +10,7 @@ type Stats = any;
 
 const STEPS = [
   { kind: "scan", n: 1, title: "Einlesen", icon: ScanLine, text: "Alle Dateien lokal, extern & Cloud je Computer erfassen – nur lesend.", url: "/api/pipeline/scan" },
-  { kind: "analyze", n: 2, title: "Analysieren", icon: Sparkles, text: "LLM liest Inhalte, OCR, Miniaturen, 50 Kategorien → Privat/Beruf/GenAI/Sonstiges.", url: "/api/pipeline/analyze" },
+  { kind: "analyze", n: 2, title: "Analysieren", icon: Sparkles, text: "LLM liest Inhalte, OCR, Miniaturen, 60 Kategorien → Privat/Beruf (mit Kapitel oneSCM)/GenAI/Sonstiges.", url: "/api/pipeline/analyze" },
   { kind: "propose", n: 3, title: "Vorschlag", icon: FolderTree, text: "Neue Ordnerstruktur virtuell erzeugen – physisch wird nichts verändert.", url: "/api/pipeline/propose" },
   { kind: "copy", n: 4, title: "Kopieren", icon: CloudUpload, text: "Nach manueller Prüfung: Kopien in neue Cloud-Ordner inkl. Statistik.", url: "" },
 ] as const;

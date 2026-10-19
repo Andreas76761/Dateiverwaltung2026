@@ -1,4 +1,4 @@
-"""50 Kategorien, gruppiert nach Privat / Beruf / GenAI / Sonstiges.
+"""60 Kategorien, gruppiert nach Privat / Beruf / GenAI / Sonstiges – unter Beruf mit dem eigenen Kapitel oneSCM.
 
 Jede Kategorie hat Schlüsselwörter (für den regelbasierten Klassifikator und als
 Hinweis für das LLM), typische Dateiendungen, ein Wichtigkeitsgewicht (0..40) und
@@ -21,15 +21,25 @@ class Category:
     keywords: tuple[str, ...] = ()
     exts: tuple[str, ...] = ()
     subfolders: tuple[str, ...] = field(default=())
+    chapter: str = ""  # Kapitel innerhalb des Bereichs (z. B. oneSCM unter Beruf) → eigener Ordner
+
+    @property
+    def short(self) -> str:
+        """Name ohne Kapitel-Präfix („oneSCM – Test & Rollout“ → „Test & Rollout“)."""
+        p = f"{self.chapter} – "
+        return self.name[len(p):] if self.chapter and self.name.startswith(p) else self.name
 
     @property
     def folder(self) -> str:
-        return self.name.replace(" & ", "_").replace(" ", "_").replace("/", "-")
+        base = self.short.replace(" & ", "_").replace(" ", "_").replace("/", "-")
+        return f"{self.chapter}/{base}" if self.chapter else base
 
 
-def C(id, name, group, weight, keywords="", exts="", subfolders=""):
+def C(id, name, group, weight, keywords="", exts="", subfolders="", chapter=""):
     split = lambda s: tuple(x.strip() for x in s.split(",") if x.strip())
-    return Category(id, name, group, weight, split(keywords), split(exts), split(subfolders))
+    if chapter:
+        name = f"{chapter} – {name}"
+    return Category(id, name, group, weight, split(keywords), split(exts), split(subfolders), chapter)
 
 
 CATEGORIES: list[Category] = [
@@ -68,7 +78,19 @@ CATEGORIES: list[Category] = [
     C("b_marketing", "Marketing & Design", "Beruf", 16, "marketing,kampagne,flyer,logo,corporate design,newsletter,social media,branding", ".psd,.ai,.indd,.fig,.sketch", ""),
     C("b_software", "Softwareentwicklung", "Beruf", 18, "def ,class ,function,import ,repository,api,backend,frontend", ".py,.js,.ts,.tsx,.java,.cs,.go,.rs,.cpp,.c,.h,.php,.rb,.sql,.sh,.ps1", ""),
     C("b_it", "IT & Infrastruktur", "Beruf", 18, "server,netzwerk,firewall,vpn,backup,konfiguration,docker,kubernetes,azure,aws,active directory", ".yaml,.yml,.conf,.ini,.tf", ""),
-    C("b_scm", "Einkauf & Lieferkette (SCM)", "Beruf", 26, "lieferant,supply chain,scm,lieferschein,einkauf,beschaffung,logistik,lager,disposition,onescm", "", ""),
+    C("b_scm", "Einkauf & Lieferkette (SCM)", "Beruf", 26, "lieferant,supply chain,scm,lieferschein,einkauf,beschaffung,logistik,lager,disposition", "", ""),
+    # ---------------- Beruf › Kapitel oneSCM (10) ----------------
+    # Nur für Dateien, die erkennbar zu oneSCM gehören (Name, Pfad oder Inhalt nennt oneSCM – siehe CHAPTERS)
+    C("o_programm", "Programm & Steuerung", "Beruf", 32, "programm,programmleitung,steering,lenkungskreis,roadmap,statusbericht,status report,meilenstein,projektplan,budget,ressourcenplanung", "", "", "oneSCM"),
+    C("o_prozesse", "Prozesse & Design", "Beruf", 28, "prozess,blueprint,fit-gap,fit gap,soll-prozess,ist-prozess,bpmn,prozesslandkarte,prozessdesign,anforderung,requirement,konzept", ".vsdx,.bpmn", "", "oneSCM"),
+    C("o_planung", "Planung & Disposition", "Beruf", 26, "demand,forecast,absatzplanung,s&op,ibp,disposition,mrp,bestandsplanung,kapazität,produktionsplanung,bedarfsplanung", "", "", "oneSCM"),
+    C("o_einkauf", "Einkauf & Lieferanten", "Beruf", 28, "lieferant,supplier,sourcing,beschaffung,einkauf,purchase,rahmenvertrag,ausschreibung,lieferantenbewertung,bestellung", "", "", "oneSCM"),
+    C("o_logistik", "Logistik & Lager", "Beruf", 24, "logistik,lager,warehouse,ewm,transport,tms,versand,spedition,wareneingang,warenausgang,kommissionierung,zoll", "", "", "oneSCM"),
+    C("o_systeme", "Systeme & Stammdaten", "Beruf", 26, "sap,s/4hana,s4hana,stammdaten,materialstamm,schnittstelle,interface,datenmigration,migration,customizing,datenmodell,berechtigung", "", "", "oneSCM"),
+    C("o_test", "Test & Rollout", "Beruf", 28, "test,testfall,testplan,testprotokoll,uat,integrationstest,cutover,go-live,golive,rollout,hypercare,welle", "", "", "oneSCM"),
+    C("o_change", "Schulung & Change", "Beruf", 22, "schulung,training,key user,keyuser,change management,kommunikation,newsletter,e-learning,trainingsunterlage,stakeholder", "", "", "oneSCM"),
+    C("o_kpi", "KPIs & Reporting", "Beruf", 24, "kpi,dashboard,reporting,report,otif,liefertreue,reichweite,bestandsreichweite,auswertung,kennzahl,power bi", "", "", "oneSCM"),
+    C("o_meetings", "Meetings & Entscheidungen", "Beruf", 26, "protokoll,meeting,agenda,entscheidung,decision log,risiko,raid,issue,offene punkte,jour fixe,workshop", "", "", "oneSCM"),
     # ---------------- GenAI (10) ----------------
     C("g_prompts", "Prompts & Prompt-Bibliothek", "GenAI", 22, "prompt,system prompt,few-shot,anweisung an das modell,you are a,du bist ein", "", ""),
     C("g_modelle", "LLM-Modelle & Gewichte", "GenAI", 16, "gguf,safetensors,checkpoint,lora,weights,quantized,llama,mistral,qwen", ".gguf,.safetensors,.ckpt,.pt,.pth,.onnx,.bin", ""),
@@ -89,7 +111,21 @@ CATEGORIES: list[Category] = [
     C("s_unbekannt", "Unsortiert", "Sonstiges", 2, "", "", ""),
 ]
 
-assert len(CATEGORIES) == 50, len(CATEGORIES)
+assert len(CATEGORIES) == 60, len(CATEGORIES)
+
+# Kapitel: eigene Kategorien innerhalb eines Bereichs, die nur greifen, wenn die Datei erkennbar dazugehört.
+# triggers: Schreibweisen im Dateinamen, Pfad oder Inhalt; default: Kategorie, wenn sonst nichts genauer passt;
+# doc_types: allgemeine Dokumentart (Protokoll, Zertifikat …) → passende Kapitel-Kategorie
+CHAPTERS: dict[str, dict] = {
+    "oneSCM": {
+        "group": "Beruf",
+        "triggers": ("onescm", "one scm", "one-scm", "one_scm"),
+        "default": "o_programm",
+        "doc_types": {"b_meetings": "o_meetings", "b_schulung": "o_change", "b_berichte": "o_kpi",
+                      "b_angebote": "o_einkauf", "b_vertraege": "o_einkauf"},
+        "beschreibung": "Eigenes Kapitel unter Beruf: alles, was zu oneSCM gehört, landet in 02_Beruf/oneSCM/…",
+    },
+}
 
 BY_ID = {c.id: c for c in CATEGORIES}
 BY_NAME = {c.name.lower(): c for c in CATEGORIES}
@@ -119,7 +155,7 @@ def find_category(name_or_id: str | None) -> Category:
 
 def as_dicts() -> list[dict]:
     return [
-        {"id": c.id, "name": c.name, "group": c.group, "weight": c.weight, "folder": c.folder,
+        {"id": c.id, "name": c.name, "short": c.short, "chapter": c.chapter, "group": c.group, "weight": c.weight, "folder": c.folder,
          "keywords": list(c.keywords), "exts": list(c.exts), "subfolders": list(c.subfolders)}
         for c in CATEGORIES
     ]

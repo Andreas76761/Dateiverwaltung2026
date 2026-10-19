@@ -432,3 +432,6 @@ h3 { font-size: 13px; font-weight: 650; text-transform: uppercase; letter-spacin
   .proposal { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); overflow: auto; }
   .proposal > .tree-pane { max-height: 40vh; border-right: 0; border-bottom: 1px solid var(--border); }
 }
+
+/* Kapitel innerhalb eines Bereichs (z. B. oneSCM unter Beruf) */
+.chapter-box { margin-top: 10px; padding: 8px 10px; border: 1px dashed var(--border-strong); border-radius: 8px; background: var(--panel-2); }

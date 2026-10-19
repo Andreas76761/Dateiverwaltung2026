@@ -46,7 +46,7 @@ export default function Settings() {
   return (
     <div className="col" style={{ gap: 18 }}>
       <div className="page-head">
-        <div><h1>Einstellungen, Skills & Kategorien</h1><p>LLM-Anbindung, Datenschutz, Zielstruktur und die 50 Kategorien.</p></div>
+        <div><h1>Einstellungen, Skills & Kategorien</h1><p>LLM-Anbindung, Datenschutz, Zielstruktur und die Kategorien (inkl. Kapitel oneSCM).</p></div>
         <div className="spacer" />
         <button className="btn primary" onClick={save}><Save size={14} /> Speichern</button>
       </div>
@@ -174,20 +174,35 @@ export default function Settings() {
       </div>
 
       <div className="card card-pad">
-        <h2 style={{ marginBottom: 12 }}>50 Kategorien</h2>
+        <h2 style={{ marginBottom: 12 }}>{cats.data?.length ?? 60} Kategorien</h2>
         <div className="grid g4" style={{ gap: 14 }}>
-          {GROUPS.map((g) => (
-            <div key={g}>
-              <h3 style={{ marginBottom: 8 }}>{g}</h3>
-              {cats.data?.filter((c) => c.group === g).map((c) => (
-                <div key={c.id} className="row" style={{ fontSize: 12.5, padding: "3px 0" }} title={c.keywords.join(", ")}>
-                  <span className={`dot g-${g === "Sonstiges" ? "sonst" : g.toLowerCase()}`} />
-                  <span className="grow ellipsis">{c.name}</span>
-                  <span className="faint">{c.count ? fmtNum(c.count) : ""}</span>
-                </div>
-              ))}
-            </div>
-          ))}
+          {GROUPS.map((g) => {
+            const inGroup = cats.data?.filter((c) => c.group === g) ?? [];
+            const chapters = [...new Set(inGroup.filter((c) => c.chapter).map((c) => c.chapter as string))];
+            const line = (c: any) => (
+              <div key={c.id} className="row" style={{ fontSize: 12.5, padding: "3px 0", flexWrap: "nowrap" }} title={`${c.keywords.join(", ")}\nZielordner: ${c.folder}`}>
+                <span className={`dot g-${g === "Sonstiges" ? "sonst" : g.toLowerCase()}`} />
+                <span className="grow ellipsis">{c.short ?? c.name}</span>
+                <span className="faint">{c.count ? fmtNum(c.count) : ""}</span>
+              </div>
+            );
+            return (
+              <div key={g}>
+                <h3 style={{ marginBottom: 8 }}>{g}</h3>
+                {inGroup.filter((c) => !c.chapter).map(line)}
+                {chapters.map((ch) => (
+                  <div key={ch} className="chapter-box">
+                    <div className="row" style={{ marginBottom: 4 }}>
+                      <b style={{ fontSize: 12.5 }}>Kapitel {ch}</b>
+                      <span className="badge outline" style={{ fontSize: 10.5 }}>{inGroup.filter((c) => c.chapter === ch).length} Kategorien</span>
+                    </div>
+                    <div className="faint mono" style={{ fontSize: 11, marginBottom: 4 }}>Zielordner: {{ Privat: "01_Privat", Beruf: "02_Beruf", GenAI: "03_GenAI", Sonstiges: "04_Sonstiges" }[g]}/{ch}/…</div>
+                    {inGroup.filter((c) => c.chapter === ch).map(line)}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

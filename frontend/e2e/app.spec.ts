@@ -77,6 +77,12 @@ test("Programme, Automatik und Einstellungen öffnen ohne Fehler", async ({ page
     await page.goto(`/#/${route}`);
     await expect(page.getByText(text).first()).toBeVisible();
   }
+  // Kapitel oneSCM unter Beruf mit seinen Kategorien und Demo-Dateien
+  await page.goto("/#/settings");
+  const box = page.locator(".chapter-box", { hasText: "Kapitel oneSCM" });
+  await expect(box).toContainText("10 Kategorien");
+  await expect(box).toContainText("Test & Rollout");
+  await expect(box).toContainText("02_Beruf/oneSCM/");
 });
 
 test("Navigation einklappen bleibt gespeichert, Dunkelmodus schaltet um", async ({ page }) => {

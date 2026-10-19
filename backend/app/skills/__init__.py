@@ -11,7 +11,7 @@ SKILLS = [
     {"id": "ocr", "name": "OCR (Tesseract)", "beschreibung": "Texterkennung in Bildern und gescannten PDFs", "agent": "Analyse", "verfügbar": None},
     {"id": "thumbnails", "name": "Miniaturansichten", "beschreibung": "Alle Seiten von PDF/PPTX/DOCX/XLSX (via LibreOffice) und Bilder", "agent": "Analyse"},
     {"id": "formats", "name": "Weitere Formate", "beschreibung": "HEIC, RAW, mehrseitige TIFF, ZIP/TAR-Inhalte, Keynote/Pages/Numbers, Audio (Cover, Wellenform, Titel)", "agent": "Analyse"},
-    {"id": "classify", "name": "LLM-Klassifikation", "beschreibung": "50 Kategorien → Privat / Beruf / GenAI / Sonstiges, Zusammenfassung", "agent": "Analyse"},
+    {"id": "classify", "name": "LLM-Klassifikation", "beschreibung": "60 Kategorien (inkl. Kapitel oneSCM) → Privat / Beruf / GenAI / Sonstiges, Zusammenfassung", "agent": "Analyse"},
     {"id": "labels", "name": "Labels", "beschreibung": "Wichtige Labels (Vertrag, Frist, Steuer, …) per LLM + Regeln", "agent": "Analyse"},
     {"id": "similarity", "name": "Ähnliche Dateien", "beschreibung": "Ähnliche Fotos (pHash), Versionen (Angebot_v2/_final) und gleicher Inhalt als PDF/DOCX (MinHash)", "agent": "Ähnlichkeit"},
     {"id": "importance", "name": "Wichtigkeit", "beschreibung": "Score 0–100 aus Kategorie, Labels, Aktualität, Duplikaten", "agent": "Analyse"},

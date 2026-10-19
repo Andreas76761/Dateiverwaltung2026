@@ -8,23 +8,27 @@ from __future__ import annotations
 import json
 import logging
 
-from ..categories import CATEGORIES, find_category
+from ..categories import CATEGORIES, CHAPTERS, find_category
 from ..config import get_settings
 
 log = logging.getLogger("fdv.llm")
 
-CATEGORY_LIST = "\n".join(f"- {c.id}: {c.name} [{c.group}]" for c in CATEGORIES)
+CATEGORY_LIST = "\n".join(f"- {c.id}: {c.name} [{c.group}{' › ' + c.chapter if c.chapter else ''}]" for c in CATEGORIES)
+CHAPTER_RULES = "\n".join(f"- Kapitel {ch} ({d['group']}): Kategorien „{ch} – …“ NUR, wenn die Datei erkennbar zu {ch} gehört "
+                          f"(Name, Pfad oder Inhalt nennt {ch}); dann haben sie Vorrang vor den allgemeinen {d['group']}-Kategorien. "
+                          f"Bewerbungsunterlagen und Privates bleiben in ihren Kategorien." for ch, d in CHAPTERS.items())
 
 SYSTEM_PROMPT = f"""Du bist der Analyse-Agent der Anwendung "Future Dateiverwaltung".
 Du ordnest einzelne Dateien eines privaten/beruflichen Datenbestands ein, damit der Nutzer
 eine neue, saubere Ordnerstruktur in der Cloud bekommt. Du änderst nichts – du schlägst nur vor.
 
-Wähle genau eine der folgenden 50 Kategorien (Angabe der id):
+Wähle genau eine der folgenden {len(CATEGORIES)} Kategorien (Angabe der id):
 {CATEGORY_LIST}
 
 Regeln:
 - Beruf = alles, was erkennbar mit Arbeit/Unternehmen/Kunden zu tun hat. GenAI = Inhalte rund um
   KI/LLMs/Prompts/Agenten/Modelle. Privat = persönliche Angelegenheiten. Sonstiges = Software, System, Archive, Unklares.
+{CHAPTER_RULES}
 - labels: 2–6 kurze deutsche Labels, die für Wiederfinden und Wichtigkeit relevant sind
   (z. B. Vertrag, Rechnung, Frist, Steuer, Vertraulich, Unterschrift, Original, Entwurf, Kunde XY, Projekt XY, Jahr).
 - summary: ein deutscher Satz (max. 200 Zeichen), was die Datei ist.

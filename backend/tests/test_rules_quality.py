@@ -89,3 +89,26 @@ def test_ordner_kontext_und_korrektur(client):
     # Manuelle Korrektur übersteht eine erneute Analyse
     wait(c, c.post("/api/pipeline/analyze", json={"force": True}).json()["job_id"])
     assert c.get(f"/api/files/{a['id']}").json()["category"] == "Versicherungen"
+
+
+def test_kapitel_onescm():
+    """oneSCM ist ein eigenes Kapitel unter Beruf: eigener Zielordner, greift nur bei erkennbarem Bezug."""
+    from app.categories import BY_ID, CATEGORIES, CHAPTERS
+    from app.llm.rules_provider import RulesProvider
+    from app.skills import pathsuggest
+
+    onescm = [c for c in CATEGORIES if c.chapter == "oneSCM"]
+    assert len(onescm) == 10 and all(c.group == "Beruf" for c in onescm)
+    assert CHAPTERS["oneSCM"]["default"] in {c.id for c in onescm}
+    assert pathsuggest.suggest(BY_ID["o_test"], "UAT.xlsx", 2026, 3, "Tabelle").startswith("02_Beruf/oneSCM/Test_Rollout/")
+
+    rp = RulesProvider()
+    def cat(name, path, text=""):
+        return rp.analyze({"name": name, "path": f"{path}/{name}", "ext": Path(name).suffix, "file_type": "Dokument"}, text)["category_id"]
+    assert cat("Testfälle.xlsx", "D:/Arbeit/oneSCM") == "o_test"
+    assert cat("Notiz.txt", "D:/Arbeit/oneSCM") == "o_programm"  # ohne genaueres Thema: Auffangkategorie im Kapitel
+    assert cat("Testfälle.xlsx", "D:/Arbeit/Projekt_X").startswith("b_")  # ohne oneSCM: allgemeine Kategorien
+    # Randnotiz im Text reicht nicht
+    assert not cat("Budget.xlsx", "D:/Arbeit", "Budget Kostenstelle " + "x " * 300 + "Lizenz oneSCM").startswith("o_")
+    # Lebenslauf bleibt Bewerbungsunterlage
+    assert cat("Lebenslauf.pdf", "C:/Users/a/Documents", "Erfahrung: oneSCM-Einführung, Rollout, Key User") == "b_personal"
