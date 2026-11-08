@@ -295,7 +295,7 @@ export default function Explorer({ params }: { params: URLSearchParams }) {
             </button>
           ))}
           <select className="input" style={{ padding: "3px 8px", fontSize: 12 }} value={category} onChange={(e) => setCategory(e.target.value)}>
-            <option value="">Kategorie (50)</option>
+            <option value="">Kategorie (alle)</option>
             {facets.data?.categories.filter((c) => !group || c.grp === group).map((c) => <option key={c.value} value={c.value}>{c.value} ({c.n})</option>)}
           </select>
           <select className="input" style={{ padding: "3px 8px", fontSize: 12 }} value={fileType} onChange={(e) => setFileType(e.target.value)}>
