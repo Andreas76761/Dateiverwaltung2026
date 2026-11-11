@@ -14,8 +14,8 @@ from ..config import get_settings
 log = logging.getLogger("fdv.llm")
 
 CATEGORY_LIST = "\n".join(f"- {c.id}: {c.name} [{c.group}{' › ' + c.chapter if c.chapter else ''}]" for c in CATEGORIES)
-CHAPTER_RULES = "\n".join(f"- Kapitel {ch} ({d['group']}): Kategorien „{ch} – …“ NUR, wenn die Datei erkennbar zu {ch} gehört "
-                          f"(Name, Pfad oder Inhalt nennt {ch}); dann haben sie Vorrang vor den allgemeinen {d['group']}-Kategorien. "
+CHAPTER_RULES = "\n".join(f"- Kapitel {ch} ({d['group']}, {d.get('art', 'Thema')} {ch}): Kategorien „{ch} – …“ NUR, wenn die Datei erkennbar zu {ch} gehört "
+                          f"(Name, Pfad oder Inhalt nennt {ch}); dann haben sie Vorrang vor den allgemeinen {d['group']}-Kategorien, auch vor „Projekte“. "
                           f"Bewerbungsunterlagen und Privates bleiben in ihren Kategorien." for ch, d in CHAPTERS.items())
 
 SYSTEM_PROMPT = f"""Du bist der Analyse-Agent der Anwendung "Future Dateiverwaltung".

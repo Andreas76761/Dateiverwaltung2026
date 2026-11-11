@@ -119,11 +119,12 @@ assert len(CATEGORIES) == 60, len(CATEGORIES)
 CHAPTERS: dict[str, dict] = {
     "oneSCM": {
         "group": "Beruf",
+        "art": "Projekt",  # vom Nutzer bestätigt: oneSCM ist ein Projekt (kein System)
         "triggers": ("onescm", "one scm", "one-scm", "one_scm"),
         "default": "o_programm",
         "doc_types": {"b_meetings": "o_meetings", "b_schulung": "o_change", "b_berichte": "o_kpi",
                       "b_angebote": "o_einkauf", "b_vertraege": "o_einkauf"},
-        "beschreibung": "Eigenes Kapitel unter Beruf: alles, was zu oneSCM gehört, landet in 02_Beruf/oneSCM/…",
+        "beschreibung": "Eigenes Kapitel unter Beruf für das Projekt oneSCM: alles, was zum Projekt gehört, landet in 02_Beruf/oneSCM/…",
     },
 }
 
