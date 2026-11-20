@@ -9,6 +9,11 @@ on:
     tags: ["v*"]               # Tags laufen immer (der Pfadfilter gilt nur für Branches)
     paths: ["packaging/**", ".github/workflows/windows-installer.yml"]
   workflow_dispatch:
+    inputs:
+      release:
+        description: "Als Release veröffentlichen mit Version (z. B. 1.0.0) – leer = nur bauen und prüfen"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -29,7 +34,11 @@ jobs:
       - name: Version
         id: ver
         run: |
-          $v = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}".TrimStart("v") } else { "0.0.${{ github.run_number }}-test" }
+          $v = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}".TrimStart("v") }
+               elseif ("${{ inputs.release }}") { "${{ inputs.release }}".TrimStart("v") }
+               else { "0.0.${{ github.run_number }}-test" }
+          $publish = ("${{ github.ref_type }}" -eq "tag") -or [bool]"${{ inputs.release }}"
+          "publish=$publish" >> $env:GITHUB_OUTPUT
           "version=$v" >> $env:GITHUB_OUTPUT
       - name: Paket bauen
         run: .\packaging\windows\build.ps1 -Version "${{ steps.ver.outputs.version }}"
@@ -82,9 +91,13 @@ jobs:
           retention-days: 30
 
       - name: Release veröffentlichen
-        if: github.ref_type == 'tag'
+        if: steps.ver.outputs.publish == 'True'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $exe = Get-ChildItem packaging\windows\build\out\*.exe | Select-Object -First 1
-          gh release create "${{ github.ref_name }}" $exe.FullName --title "Future Dateiverwaltung ${{ steps.ver.outputs.version }}" --notes-file packaging\windows\RELEASE.md
+          $tag = "v${{ steps.ver.outputs.version }}"
+          gh release view $tag 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) { gh release upload $tag $exe.FullName --clobber }   # Release gibt es schon (z. B. im Browser angelegt)
+          else { gh release create $tag $exe.FullName --target "${{ github.sha }}" --title "Future Dateiverwaltung ${{ steps.ver.outputs.version }}" --notes-file packaging\windows\RELEASE.md }
+          if ($LASTEXITCODE) { throw "Release fehlgeschlagen" }
