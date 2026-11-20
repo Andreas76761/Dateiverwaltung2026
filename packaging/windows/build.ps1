@@ -85,6 +85,8 @@ Write-Host "Programmordner: $mb MB – größte Bestandteile:"
 @(Get-ChildItem "$dist\python\Lib\site-packages" -Directory) + @(Get-ChildItem "$dist\tools" -Directory) + @(Get-Item "$dist\app") |
     ForEach-Object { [pscustomobject]@{ MB = [math]::Round(((Get-ChildItem $_.FullName -Recurse -File | Measure-Object Length -Sum).Sum / 1MB), 1); Name = $_.Name } } |
     Sort-Object MB -Descending | Select-Object -First 15 | Format-Table -AutoSize | Out-String | Write-Host
+Get-ChildItem "$dist\tools" -Recurse -File | Sort-Object Length -Descending | Select-Object -First 12 |
+    ForEach-Object { "{0,8:N1} MB  {1}" -f ($_.Length / 1MB), $_.FullName.Substring($dist.Length) } | Write-Host
 if ($NoInstaller) { exit 0 }
 
 # 6) Installer mit Inno Setup

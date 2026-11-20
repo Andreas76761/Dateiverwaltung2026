@@ -104,6 +104,36 @@ def message(text: str, error: bool = False) -> None:
         print(text)
 
 
+def wait_exit(pid: int, seconds: float) -> None:
+    """Warten, bis der Serverprozess wirklich beendet ist (er hält sonst noch Programmdateien geöffnet – ein Update
+    könnte sie nicht ersetzen). Hängt er, wird er mit Rückgabewert 0 beendet (kein Neustart durch die Aufgabenplanung)."""
+    if os.name == "nt":
+        import ctypes
+        k32 = ctypes.windll.kernel32
+        h = k32.OpenProcess(0x00100000 | 0x0001, False, pid)  # SYNCHRONIZE | PROCESS_TERMINATE
+        if not h:
+            return  # schon beendet
+        try:
+            if k32.WaitForSingleObject(h, int(seconds * 1000)) != 0:
+                k32.TerminateProcess(h, 0)
+                k32.WaitForSingleObject(h, 5000)
+        finally:
+            k32.CloseHandle(h)
+        return
+    import signal
+    end = time.time() + seconds
+    while time.time() < end:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return
+        time.sleep(0.2)
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+
+
 def stop(cfg: dict) -> bool:
     state = cfg["data"] / "server.json"
     if not state.exists() or not running(cfg):
@@ -115,11 +145,8 @@ def stop(cfg: dict) -> bool:
         _open(req, timeout=5).close()
     except OSError:
         return False
-    for _ in range(60):
-        if not running(cfg):
-            return True
-        time.sleep(0.5)
-    return False
+    wait_exit(int(info["pid"]), 30)
+    return not running(cfg)
 
 
 def main(argv: list[str]) -> int:
