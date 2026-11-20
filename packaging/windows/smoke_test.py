@@ -41,7 +41,7 @@ def wait_job(job_id: int) -> dict:
 
 def starter(*args: str) -> str:
     r = subprocess.run([str(PY), str(STARTER), *args], capture_output=True, text=True, timeout=180)
-    print(f"starter {' '.join(args)} → {r.returncode} {r.stdout.strip()} {r.stderr.strip()[-500:]}")
+    print(f"starter {' '.join(args)} -> {r.returncode} {r.stdout.strip()} {r.stderr.strip()[-500:]}")
     assert r.returncode == 0, r
     return r.stdout
 

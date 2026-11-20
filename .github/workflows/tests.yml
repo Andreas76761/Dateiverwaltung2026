@@ -48,7 +48,7 @@ jobs:
 
   e2e:
     name: Oberflächentests (Playwright)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # Playwright 1.56 unterstützt Ubuntu 26.04 (neues ubuntu-latest) noch nicht
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6

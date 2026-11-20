@@ -19,6 +19,8 @@ jobs:
     defaults:
       run:
         shell: pwsh
+    env:
+      PYTHONUTF8: "1"
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6

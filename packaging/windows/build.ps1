@@ -58,6 +58,12 @@ if ($Tesseract) {
         Remove-Item "$dist\tools\tesseract\`$PLUGINSDIR", "$dist\tools\tesseract\tesseract-uninstall.exe" -Recurse -Force -ErrorAction SilentlyContinue
         $deu = Fetch "https://github.com/tesseract-ocr/tessdata_fast/raw/main/deu.traineddata" "deu.traineddata"
         Copy-Item $deu "$dist\tools\tesseract\tessdata\"
+        # nur Deutsch, Englisch und Schrifterkennung behalten; Trainingsprogramme und Dokumentation weglassen
+        $t = "$dist\tools\tesseract"
+        Get-ChildItem "$t\tessdata" -Recurse -Filter *.traineddata | Where-Object { $_.BaseName -notin @("deu", "eng", "osd") } | Remove-Item -Force
+        Remove-Item "$t\tessdata\script", "$t\doc", "$t\docs" -Recurse -Force -ErrorAction SilentlyContinue
+        Get-ChildItem $t -Filter *.exe | Where-Object { $_.Name -ne "tesseract.exe" } | Remove-Item -Force
+        Get-ChildItem $t -Filter *.html | Remove-Item -Force
         $langs = & "$dist\tools\tesseract\tesseract.exe" --list-langs 2>&1 | Out-String
         if ($langs -notmatch "deu" -or $langs -notmatch "eng") { throw "Sprachdaten fehlen: $langs" }
         Write-Host "Texterkennung enthalten (deu+eng)"
@@ -75,7 +81,10 @@ if ($LASTEXITCODE) { throw "Import-Prüfung fehlgeschlagen" }
 Remove-Item Env:FDV_DATA_DIR
 if (Test-Path "$dist\app\data") { throw "Unerwarteter Datenordner im Paket: $dist\app\data" }
 $mb = [math]::Round(((Get-ChildItem $dist -Recurse -File | Measure-Object Length -Sum).Sum / 1MB), 0)
-Write-Host "Programmordner: $mb MB"
+Write-Host "Programmordner: $mb MB – größte Bestandteile:"
+@(Get-ChildItem "$dist\python\Lib\site-packages" -Directory) + @(Get-ChildItem "$dist\tools" -Directory) + @(Get-Item "$dist\app") |
+    ForEach-Object { [pscustomobject]@{ MB = [math]::Round(((Get-ChildItem $_.FullName -Recurse -File | Measure-Object Length -Sum).Sum / 1MB), 1); Name = $_.Name } } |
+    Sort-Object MB -Descending | Select-Object -First 15 | Format-Table -AutoSize | Out-String | Write-Host
 if ($NoInstaller) { exit 0 }
 
 # 6) Installer mit Inno Setup
