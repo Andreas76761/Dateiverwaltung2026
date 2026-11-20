@@ -29,6 +29,8 @@ def main(argv: list[str] | None = None) -> None:
 
     from .config import get_settings
 
+    _write_state(a.port, bool(a.tls or (get_settings().raw.get("server") or {}).get("tls")))
+
     ssl = {}
     if a.tls or (get_settings().raw.get("server") or {}).get("tls"):
         from . import tls
@@ -36,6 +38,36 @@ def main(argv: list[str] | None = None) -> None:
         ssl = {"ssl_certfile": str(p["cert"]), "ssl_keyfile": str(p["key"])}
         print(f"HTTPS aktiv · CA-Fingerabdruck {tls.fingerprint()}", flush=True)
     uvicorn.run("app.main:app", host=a.host, port=a.port, log_config=None if a.log else uvicorn.config.LOGGING_CONFIG, **ssl)
+
+
+def state_file() -> Path:
+    from .config import get_settings
+    return get_settings().data_dir / "server.json"
+
+
+def _write_state(port: int, tls: bool) -> None:
+    """PID, Port und einen Einmal-Schlüssel ablegen: Damit kann der Starter (Windows-Startmenü „beenden“) den Server
+    geordnet beenden – nur von diesem Computer aus und nur mit dem Schlüssel aus der Datei."""
+    import atexit
+    import json
+    import secrets
+
+    token = secrets.token_urlsafe(24)
+    os.environ["FDV_SHUTDOWN_TOKEN"] = token
+    f = state_file()
+    f.write_text(json.dumps({"pid": os.getpid(), "port": port, "tls": tls, "token": token}), encoding="utf-8")
+    try:
+        os.chmod(f, 0o600)
+    except OSError:
+        pass
+
+    def _cleanup():
+        try:
+            if json.loads(f.read_text(encoding="utf-8")).get("pid") == os.getpid():
+                f.unlink()
+        except (OSError, ValueError):
+            pass
+    atexit.register(_cleanup)
 
 
 if __name__ == "__main__":

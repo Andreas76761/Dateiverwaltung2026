@@ -211,7 +211,7 @@ def is_demo() -> bool:
 
 def current() -> dict:
     s = get_settings()
-    return {"config_file": str(s.source), "demo": is_demo(), "target_root": s.target_root, "structure": s.target_structure,
+    return {"config_file": str(s.source), "demo": is_demo(), "configured": bool(s.computers), "target_root": s.target_root, "structure": s.target_structure,
             "computers": [{"id": c["id"], "name": c["name"], "os": c.get("os"), "mode": c["mode"],
                            "volumes": [{"id": v["id"], "name": v["name"], "path": v["path"], "kind": v.get("kind", "internal")}
                                        for v in c["volumes"]]} for c in s.computers],

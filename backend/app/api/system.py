@@ -6,7 +6,7 @@ import os
 import shutil
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from .. import auth, db
@@ -23,6 +23,27 @@ router = APIRouter(prefix="/api", tags=["System"])
 @router.get("/health")
 def health():
     return {"ok": True, "app": "Future Dateiverwaltung"}
+
+
+@router.post("/system/beenden")
+def shutdown(request: Request):
+    """Server geordnet beenden (Startmenü „Future Dateiverwaltung beenden“). Nur von diesem Computer und nur mit dem
+    Schlüssel aus data_dir/server.json – der liegt im Benutzerprofil und ist für andere nicht lesbar."""
+    import secrets
+    import signal
+    import threading
+
+    token = os.environ.get("FDV_SHUTDOWN_TOKEN", "")
+    given = request.headers.get("X-FDV-Shutdown", "")
+    host = request.client.host if request.client else ""
+    if not token or host not in auth.LOOPBACK or not secrets.compare_digest(token, given):
+        raise HTTPException(403, "Beenden nur lokal mit Schlüssel")
+
+    def stop():
+        signal.raise_signal(signal.SIGINT)  # wie Strg+C: uvicorn beendet laufende Anfragen sauber, Rückgabewert 0
+        threading.Timer(15, lambda: os._exit(0)).start()
+    threading.Timer(0.3, stop).start()
+    return {"ok": True}
 
 
 @router.get("/sources")

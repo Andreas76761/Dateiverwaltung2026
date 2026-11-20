@@ -24,6 +24,11 @@ def _first_existing(candidates: list[str]) -> str | None:
     return None
 
 
+def bundled_tool(*parts: str) -> Path:
+    """Werkzeuge aus dem Windows-Installationspaket: <Installationsordner>\\tools\\… (neben dem mitgelieferten Python)."""
+    return Path(sys.executable).resolve().parent.parent / "tools" / Path(*parts)
+
+
 @lru_cache
 def soffice() -> str | None:
     found = shutil.which("soffice") or shutil.which("libreoffice")
@@ -44,7 +49,7 @@ def tesseract() -> str | None:
         return found
     if IS_WINDOWS:
         local = os.environ.get("LOCALAPPDATA", "")
-        return _first_existing([r"C:\Program Files\Tesseract-OCR\tesseract.exe", r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        return _first_existing([str(bundled_tool("tesseract", "tesseract.exe")), r"C:\Program Files\Tesseract-OCR\tesseract.exe", r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
                                 rf"{local}\Programs\Tesseract-OCR\tesseract.exe"])
     if IS_MAC:
         return _first_existing(["/opt/homebrew/bin/tesseract", "/usr/local/bin/tesseract"])

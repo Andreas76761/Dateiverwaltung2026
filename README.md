@@ -15,6 +15,10 @@ Ansicht, Analyse, Eingruppierung und sichere Archivierung **aller Dateien auf me
 
 Erweiterung: `inventory_agent` – installierte Programme, LLM-Lösungen (Ollama, LM Studio, Claude Code, Python-KI-Bibliotheken …) und lokale Modelle je Computer.
 
+## Installation unter Windows (Installationspaket)
+
+Unter **Releases** auf GitHub liegt `FutureDateiverwaltung-Setup-<Version>.exe`: herunterladen, ausführen, fertig – ohne Administratorrechte, Python und Texterkennung sind enthalten. Danach Startmenü → *Future Dateiverwaltung* (öffnet die Oberfläche im Browser, beim ersten Mal mit dem Einrichtungs-Assistenten). Auf den weiteren Computern dasselbe Paket installieren und *Diesen Computer als Agent einrichten* wählen. Einstellungen und Datenbank liegen unter `%LOCALAPPDATA%\FutureDateiverwaltung` und bleiben bei Update und Deinstallation erhalten. Details: [packaging/windows](packaging/windows/README.md).
+
 ## Schnellstart (Demo mit 4 Computern, 6 Festplatten, 2 Cloud-Ordnern)
 
 ```bash

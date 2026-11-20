@@ -60,6 +60,12 @@ export default function Dashboard({ go }: { go: (page: string) => void }) {
         </div>
       </div>
 
+      {setup && !setup.demo && setup.configured === false && (
+        <div className="callout warn" style={{ fontSize: 13, cursor: "pointer" }} onClick={() => go("setup")}>
+          <Wand2 size={18} color="var(--accent)" />
+          <span><b>Willkommen!</b> Noch ist nichts eingerichtet. Im Einrichtungs-Assistenten wählst du Computer, Festplatten und den Cloud-Zielordner – <u>Einrichtung starten</u></span>
+        </div>
+      )}
       {setup?.demo && (
         <div className="callout" style={{ fontSize: 13, cursor: "pointer" }} onClick={() => go("setup")}>
           <Wand2 size={18} color="var(--accent)" />

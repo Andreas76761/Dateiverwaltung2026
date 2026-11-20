@@ -26,7 +26,7 @@ class NoDeleteMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-PUBLIC = {"/api/health", "/api/cloud/callback", "/api/auth/status", "/api/auth/login", "/api/auth/bootstrap", "/api/auth/ca.pem"}
+PUBLIC = {"/api/health", "/api/cloud/callback", "/api/auth/status", "/api/auth/login", "/api/auth/bootstrap", "/api/auth/ca.pem", "/api/system/beenden"}
 READER_POST_OK = {"/api/auth/logout", "/api/auth/password"}
 
 

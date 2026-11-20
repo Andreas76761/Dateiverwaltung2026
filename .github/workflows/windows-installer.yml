@@ -1,0 +1,88 @@
+name: Windows-Installationspaket
+
+# Baut FutureDateiverwaltung-Setup-<Version>.exe, installiert es auf einem frischen Windows, prüft die installierte App
+# (Start, Einrichtung, Einlesen, Analyse, Miniaturen, Texterkennung, Beenden, Update, Deinstallation).
+# Bei einem Versions-Tag (v1.2.3) wird das Paket als GitHub-Release veröffentlicht.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]               # Tags laufen immer (der Pfadfilter gilt nur für Branches)
+    paths: ["packaging/**", ".github/workflows/windows-installer.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Version
+        id: ver
+        run: |
+          $v = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}".TrimStart("v") } else { "0.0.${{ github.run_number }}-test" }
+          "version=$v" >> $env:GITHUB_OUTPUT
+      - name: Paket bauen
+        run: .\packaging\windows\build.ps1 -Version "${{ steps.ver.outputs.version }}"
+
+      - name: Installieren (still, ohne Administratorrechte)
+        run: |
+          $exe = Get-ChildItem packaging\windows\build\out\*.exe | Select-Object -First 1
+          $p = Start-Process $exe.FullName -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/CURRENTUSER","/LOG=$env:RUNNER_TEMP\install.log" -Wait -PassThru
+          if ($p.ExitCode) { Get-Content "$env:RUNNER_TEMP\install.log" -Tail 40; throw "Installation fehlgeschlagen: $($p.ExitCode)" }
+          $inst = "$env:LOCALAPPDATA\Programs\Future Dateiverwaltung"
+          foreach ($f in "python\pythonw.exe", "starter.py", "app\backend\app\main.py", "app\frontend\dist\index.html", "unins000.exe") {
+            if (-not (Test-Path "$inst\$f")) { throw "fehlt nach der Installation: $f" }
+          }
+          $lnk = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Future Dateiverwaltung\Future Dateiverwaltung.lnk"
+          if (-not (Test-Path $lnk)) { throw "Startmenü-Eintrag fehlt" }
+          "INST=$inst" >> $env:GITHUB_ENV
+
+      - name: Installierte App prüfen
+        run: |
+          & "$env:INST\python\python.exe" packaging\windows\smoke_test.py "$env:INST" "$env:RUNNER_TEMP\fdvtest\Quelle"
+          if ($LASTEXITCODE) { Get-Content "$env:LOCALAPPDATA\FutureDateiverwaltung\fdv-server.log" -Tail 60; throw "Prüfung fehlgeschlagen" }
+
+      - name: Update über laufende App installieren
+        run: |
+          & "$env:INST\python\python.exe" "$env:INST\starter.py" --hintergrund
+          $exe = Get-ChildItem packaging\windows\build\out\*.exe | Select-Object -First 1
+          $p = Start-Process $exe.FullName -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/CURRENTUSER","/LOG=$env:RUNNER_TEMP\update.log" -Wait -PassThru
+          if ($p.ExitCode) { Get-Content "$env:RUNNER_TEMP\update.log" -Tail 40; throw "Update fehlgeschlagen: $($p.ExitCode)" }
+          & "$env:INST\python\python.exe" "$env:INST\starter.py" --hintergrund
+          $st = & "$env:INST\python\python.exe" "$env:INST\starter.py" --status | ConvertFrom-Json
+          if (-not $st.running) { throw "nach dem Update startet die App nicht" }
+          $files = Invoke-RestMethod http://localhost:8800/api/files
+          if ($files.total -lt 3) { throw "Daten nach dem Update verloren" }
+          & "$env:INST\python\python.exe" "$env:INST\starter.py" --beenden --still
+
+      - name: Deinstallieren – Einstellungen und Daten bleiben
+        run: |
+          $p = Start-Process "$env:INST\unins000.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait -PassThru
+          Start-Sleep 5
+          if (Test-Path "$env:INST\python") { throw "Programmdateien nicht entfernt" }
+          if (-not (Test-Path "$env:LOCALAPPDATA\FutureDateiverwaltung\fdv.yaml")) { throw "Einstellungen wurden gelöscht!" }
+          if (-not (Test-Path "$env:LOCALAPPDATA\FutureDateiverwaltung\daten\fdv.sqlite3")) { throw "Datenbank wurde gelöscht!" }
+          if (-not (Test-Path "$env:RUNNER_TEMP\fdvtest\Quelle\Steuern\Steuerbescheid_2025.pdf")) { throw "Quelldatei fehlt!" }
+          Write-Host "Deinstallation sauber: Programm entfernt, Einstellungen, Datenbank und Quelldateien erhalten"
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: FutureDateiverwaltung-Setup-${{ steps.ver.outputs.version }}
+          path: packaging/windows/build/out/*.exe
+          retention-days: 30
+
+      - name: Release veröffentlichen
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $exe = Get-ChildItem packaging\windows\build\out\*.exe | Select-Object -First 1
+          gh release create "${{ github.ref_name }}" $exe.FullName --title "Future Dateiverwaltung ${{ steps.ver.outputs.version }}" --notes-file packaging\windows\RELEASE.md
